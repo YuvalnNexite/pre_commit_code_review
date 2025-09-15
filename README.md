@@ -17,6 +17,15 @@ chmod +x .git/hooks/pre-commit
 mkdir -p code_review_memory
 cp <root>/code_review_memory/* code_review_memory/
 ```
+
+### Uninstallation
+```bash
+curl -fsSL https://raw.githubusercontent.com/YuvalnNexite/pre_commit_code_review/main/uninstall.sh | bash
+```
+or, from a local clone:
+```bash
+./uninstall.sh
+```
 ## Dependencies
 ### Python linting
 pip install flake8
