@@ -2,30 +2,22 @@
 # install.sh
 set -euo pipefail
 
-# Get the current repository URL dynamically
-REPO_URL=$(git config --get remote.origin.url 2>/dev/null || echo "")
-if [[ -z "$REPO_URL" ]]; then
-    echo "Error: Could not determine repository URL. Make sure you're in a git repository with an origin remote."
-    exit 1
-fi
-
-# Convert SSH URL to HTTPS if needed
-if [[ "$REPO_URL" =~ ^git@github\.com:(.+)\.git$ ]]; then
-    REPO_URL="https://github.com/${BASH_REMATCH[1]}.git"
-fi
+# Configuration: source repository that hosts the hook and memory files
+SOURCE_REPO="YuvalnNexite/pre_commit_code_review"
+RAW_BASE="https://raw.githubusercontent.com/${SOURCE_REPO}/main"
 
 HOOK_NAME="code_review_pre-commit.sh"
 GLOBAL_HOOKS_DIR="$HOME/.git-hooks"
 
 echo "Installing pre-commit code review hook globally..."
-echo "Repository: $REPO_URL"
+echo "Source: ${SOURCE_REPO}"
 
 # Create global hooks directory
 mkdir -p "$GLOBAL_HOOKS_DIR"
 
 # Download the hook script to global directory
 echo "Downloading hook script..."
-curl -fsSL "${REPO_URL}/raw/main/hooks/${HOOK_NAME}" -o "$GLOBAL_HOOKS_DIR/pre-commit"
+curl -fsSL "${RAW_BASE}/hooks/${HOOK_NAME}" -o "$GLOBAL_HOOKS_DIR/pre-commit"
 
 # Make it executable
 chmod +x "$GLOBAL_HOOKS_DIR/pre-commit"
@@ -37,7 +29,7 @@ git config --global core.hooksPath "$GLOBAL_HOOKS_DIR"
 # Create global code_review_memory directory
 echo "Setting up global code review memory files..."
 mkdir -p "$GLOBAL_HOOKS_DIR/code_review_memory"
-curl -fsSL "${REPO_URL}/raw/main/code_review_memory/sql.md" -o "$GLOBAL_HOOKS_DIR/code_review_memory/sql.md" 2>/dev/null || true
+curl -fsSL "${RAW_BASE}/code_review_memory/sql.md" -o "$GLOBAL_HOOKS_DIR/code_review_memory/sql.md" 2>/dev/null || true
 
 echo "✅ Global installation complete!"
 echo ""
