@@ -6,7 +6,7 @@ diff_text="$(git diff -U100000 HEAD --no-color || true)"
 
 run_review_async() (
   # Run in a subshell so we can background cleanly
-  out="gemini_auto_commit_review.md"
+  out="auto_code_review.md"
   echo "_Review running..._" > "$out"
   tmp_out="$(mktemp)"
   tmp_prompt="$(mktemp)"
