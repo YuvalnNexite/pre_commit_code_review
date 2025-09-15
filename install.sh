@@ -29,7 +29,7 @@ git config --global core.hooksPath "$GLOBAL_HOOKS_DIR"
 # Create global code_review_memory directory
 echo "Setting up global code review memory files..."
 mkdir -p "$GLOBAL_HOOKS_DIR/code_review_memory"
-curl -fsSL "${RAW_BASE}/code_review_memory/sql.md" -o "$GLOBAL_HOOKS_DIR/code_review_memory/sql.md" 2>/dev/null || true
+curl -fsSL "${RAW_BASE}/code_review_memory/memory_template.txt" -o "$GLOBAL_HOOKS_DIR/code_review_memory/memory_template.txt" 2>/dev/null || true
 
 echo "✅ Global installation complete!"
 echo ""

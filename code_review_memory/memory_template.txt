@@ -1,0 +1,25 @@
+# Title of what this file refers to
+
+The exception format is a numbered list where the first level number corresponds to the rule it is an exception to.
+
+## Rules
+### Ignore
+1. NA
+2. NA
+
+### Exceptions to "Ignore"
+1. 1. NA
+   2. NA
+2. 1. NA
+   2. NA
+
+### Pay closer attention to
+1. NA
+
+### Exceptions to "Pay closer attention to"
+1. 1. NA
+   2. NA
+
+## General knowledge
+- branch_info_current_v view primary keys are: chain, branch.
+
