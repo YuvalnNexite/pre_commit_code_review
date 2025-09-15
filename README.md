@@ -32,3 +32,8 @@ for macOS, Linux, Windows (WSL):
 ```bash
 curl https://cursor.com/install -fsS | bash
 ```
+
+# explanation:
+This script installs a pre-commit hook that uses AI to review code before each commit. It requires Gemini cli or cursor cli for the reviews and flake8 for linting.
+The hook script is copied to the `HOME.git-hooks` directory and made executable.
+A memory directory is created to improve future reviews and give the model domain knowledge.
