@@ -25,7 +25,7 @@ npm install -g @google/generative-ai-cli
 gemini config set apiKey YOUR_GEMINI_API_KEY
 
 ### cursor cli (optional)
-for macOS, Linux, Windows(WSL):
+for macOS, Linux, Windows (WSL):
 ```bash
 curl https://cursor.com/install -fsS | bash
 ```
