@@ -16,10 +16,16 @@ chmod +x .git/hooks/pre-commit
 mkdir -p code_review_memory
 cp <root>/code_review_memory/* code_review_memory/
 
-### Dependencies
-# Python linting
+## Dependencies
+### Python linting
 pip install flake8
 
-# Gemini AI (requires API key)
+### Gemini AI (requires API key)
 npm install -g @google/generative-ai-cli
 gemini config set apiKey YOUR_GEMINI_API_KEY
+
+### cursor cli (optional)
+for macOS, Linux, Windows(WSL):
+```bash
+curl https://cursor.com/install -fsS | bash
+```
