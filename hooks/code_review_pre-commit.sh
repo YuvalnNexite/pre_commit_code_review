@@ -81,10 +81,6 @@ Structure your report exactly as follows:
 
 -- end of report --
 
-Assume:
-- BigQuery SQL
-- Python 3.8
-
 ## Notes
 - Answer only with the final report.
 - Keep explanations concise and scannable.
@@ -99,13 +95,13 @@ PROMPT
       if gemini --approval-mode "auto_edit" -m gemini-2.5-pro -p "$(cat "$tmp_prompt")" > "$tmp_out" 2>/dev/null; then
         :
       elif need cursor-agent; then
-        cursor-agent -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
+        cursor-agent -f -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
           || echo "_Cursor review failed._" > "$tmp_out"
       else
         echo "_Gemini review failed and no Cursor CLI found._" > "$tmp_out"
       fi
     elif need cursor-agent; then
-      cursor-agent -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
+      cursor-agent -f -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
         || echo "_Cursor review failed._" > "$tmp_out"
     else
       echo "_Skipped AI review (no supported CLI found: gemini, cursor-agent)_" > "$tmp_out"
