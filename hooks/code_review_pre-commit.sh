@@ -94,12 +94,21 @@ Assume:
 
 PROMPT
 
-    # Run Gemini with the constructed prompt
+    # Run AI review: try Gemini first; on failure, try Cursor (cursor-agent)
     if need gemini; then
-      gemini --approval-mode "auto_edit" -m gemini-2.5-pro -p "$(cat "$tmp_prompt")" > "$tmp_out" 2>/dev/null \
-        || echo "_Gemini review failed._" > "$tmp_out"
+      if gemini --approval-mode "auto_edit" -m gemini-2.5-pro -p "$(cat "$tmp_prompt")" > "$tmp_out" 2>/dev/null; then
+        :
+      elif need cursor-agent; then
+        cursor-agent -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
+          || echo "_Cursor review failed._" > "$tmp_out"
+      else
+        echo "_Gemini review failed and no Cursor CLI found._" > "$tmp_out"
+      fi
+    elif need cursor-agent; then
+      cursor-agent -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
+        || echo "_Cursor review failed._" > "$tmp_out"
     else
-      echo "_Skipped Gemini review (gemini CLI not found)_" > "$tmp_out"
+      echo "_Skipped AI review (no supported CLI found: gemini, cursor-agent)_" > "$tmp_out"
     fi
   fi
 
