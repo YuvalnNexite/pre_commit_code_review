@@ -34,10 +34,10 @@ pip install flake8
 ```bash
 npm install -g @google/generative-ai-cli
 ```
-gemini config set apiKey GEMINI_API_KEY = your_api_key_here
+gemini config set apiKey GEMINI_API_KEY = your_api_key
 
 ### cursor cli (optional)
-for macOS, Linux, Windows (WSL):
+for macOS/Linux:
 ```bash
 curl https://cursor.com/install -fsS | bash
 ```
