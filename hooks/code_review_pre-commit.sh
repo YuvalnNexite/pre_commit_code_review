@@ -10,7 +10,25 @@ run_review_async() (
   echo "_Review running..._" > "$out"
   tmp_out="$(mktemp)"
   tmp_prompt="$(mktemp)"
-  trap 'rm -f "$tmp_out" "$tmp_prompt" 2>/dev/null' EXIT
+  tmp_stdout="$(mktemp)"
+  tmp_stderr="$(mktemp)"
+  trap 'rm -f "$tmp_out" "$tmp_prompt" "$tmp_stdout" "$tmp_stderr" 2>/dev/null' EXIT
+
+  append_ai_stderr() {
+    if [ -s "$tmp_stderr" ]; then
+      {
+        echo
+        echo '---'
+        echo '## AI stderr'
+        cat "$tmp_stderr"
+      } >> "$tmp_out"
+    fi
+  }
+
+  write_ai_success() {
+    cat "$tmp_stdout" > "$tmp_out"
+    append_ai_stderr
+  }
 
   # Capture the diff up front (no colors to keep prompt clean)
 
@@ -92,19 +110,28 @@ PROMPT
 
     # Run AI review: try Gemini first; on failure, try Cursor (cursor-agent)
     if need gemini; then
-      if gemini --approval-mode "auto_edit" -m gemini-2.5-pro -p "$(cat "$tmp_prompt")" > "$tmp_out" 2>/dev/null; then
-        :
+      if gemini --approval-mode "auto_edit" -m gemini-2.5-pro < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+        write_ai_success
       elif need cursor-agent; then
-        cursor-agent -f -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
-          || echo "_Cursor review failed._" > "$tmp_out"
+        if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+          write_ai_success
+        else
+          printf "_Cursor review failed._\n" > "$tmp_out"
+          append_ai_stderr
+        fi
       else
-        echo "_Gemini review failed and no Cursor CLI found._" > "$tmp_out"
+        printf "_Gemini review failed and no Cursor CLI found._\n" > "$tmp_out"
+        append_ai_stderr
       fi
     elif need cursor-agent; then
-      cursor-agent -f -p "$(cat "$tmp_prompt")" --output-format text > "$tmp_out" 2>/dev/null \
-        || echo "_Cursor review failed._" > "$tmp_out"
+      if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+        write_ai_success
+      else
+        printf "_Cursor review failed._\n" > "$tmp_out"
+        append_ai_stderr
+      fi
     else
-      echo "_Skipped AI review (no supported CLI found: gemini, cursor-agent)_" > "$tmp_out"
+      printf "_Skipped AI review (no supported CLI found: gemini, cursor-agent)_\n" > "$tmp_out"
     fi
   fi
 
