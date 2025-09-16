@@ -7,7 +7,7 @@ SOURCE_REPO="YuvalnNexite/pre_commit_code_review"
 RAW_BASE="https://raw.githubusercontent.com/${SOURCE_REPO}/main"
 
 HOOK_NAME="code_review_pre-commit.sh"
-GLOBAL_HOOKS_DIR="$HOME/.git-hooks"
+GLOBAL_HOOKS_DIR="$HOME/.git-hooks-code-review"
 
 echo "Installing pre-commit code review hook globally..."
 echo "Source: ${SOURCE_REPO}"

@@ -2,7 +2,7 @@
 # uninstall.sh
 set -euo pipefail
 
-GLOBAL_HOOKS_DIR="$HOME/.git-hooks"
+GLOBAL_HOOKS_DIR="$HOME/.git-hooks-code-review"
 
 echo "Uninstalling pre-commit code review hook..."
 

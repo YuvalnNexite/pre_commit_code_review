@@ -43,8 +43,8 @@ curl https://cursor.com/install -fsS | bash
 ```
 
 ## Memory Usage
-To use the presistant memory feature put a code_review_memory directory in the project root and follow the template to create consept.md memory files.
-The AI will consolt the memory file when he finds the name of the file related to the changed text.
+To use the persistent memory feature put a code_review_memory directory in the project root and follow the template to create consept.md memory files.
+The AI will consult the memory file when he finds the name of the file related to the changed text.
 examples:
 if you change a .py file -> the AI will read python.md
 if you change a file that uses a library called numpy -> it will read numpy.md
@@ -52,5 +52,5 @@ if you change a file in a directory called reports -> it will read reports.md
 
 ## Explanation:
 This script installs a pre-commit hook that uses AI to review code before each commit. It requires Gemini cli or cursor cli for the reviews and flake8 for linting.
-The hook script is copied to the `HOME.git-hooks` directory and made executable.
+The hook script is copied to the `HOME.git-hooks-code-review` directory and made executable.
 A memory directory is created to improve future reviews and give the model domain knowledge.
