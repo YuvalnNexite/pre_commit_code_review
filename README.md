@@ -30,13 +30,18 @@ or, from a local clone:
 ### Python linting
 pip install flake8
 
-### Gemini AI (requires API key)
+### Gemini Cli
 ```bash
 npm install -g @google/generative-ai-cli
 ```
-gemini config set apiKey GEMINI_API_KEY = your_api_key
+Make sure the Gemini cli works independently and set up authentication/API if needed.
+for a quick check run:
+```
+gemini -p "hey"
+```
+for more information about the gemini cli: `https://github.com/google-gemini/gemini-cli`
 
-### cursor cli (optional)
+### Cursor Cli (optional)
 for macOS/Linux:
 ```bash
 curl https://cursor.com/install -fsS | bash
@@ -52,5 +57,5 @@ if you change a file in a directory called reports -> it will read reports.md
 
 ## Explanation:
 This script installs a pre-commit hook that uses AI to review code before each commit. It requires Gemini cli or cursor cli for the reviews and flake8 for linting.
-The hook script is copied to the `HOME.git-hooks-code-review` directory and made executable.
+The hook script is copied to the `$HOME.git-hooks-code-review` directory and made executable.
 A memory directory is created to improve future reviews and give the model domain knowledge.
