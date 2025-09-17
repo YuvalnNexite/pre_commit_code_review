@@ -4,7 +4,7 @@ Automated code review using Gemini AI that runs before each commit.
 
 ## Quick Installation
 
-### One-line installation
+### One-line installation for macOS, Linux, Windows(Git Bash)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YuvalnNexite/pre_commit_code_review/main/install.sh | bash
 ```
