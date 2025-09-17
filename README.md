@@ -39,7 +39,7 @@ for a quick check run:
 ```
 gemini -p "hey"
 ```
-for more information about the gemini cli: `https://github.com/google-gemini/gemini-cli`
+For more information about the gemini cli: `https://github.com/google-gemini/gemini-cli`
 
 ### Cursor Cli (optional)
 for macOS/Linux:
