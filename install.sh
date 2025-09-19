@@ -37,7 +37,9 @@ SCRIPTS_DIR="$GLOBAL_HOOKS_DIR/scripts"
 echo "Installing helper scripts into $SCRIPTS_DIR..."
 mkdir -p "$SCRIPTS_DIR"
 curl -fsSL "${RAW_BASE}/scripts/interactive_review.py" -o "$SCRIPTS_DIR/interactive_review.py"
+curl -fsSL "${RAW_BASE}/scripts/postprocess_review.py" -o "$SCRIPTS_DIR/postprocess_review.py"
 chmod +x "$SCRIPTS_DIR/interactive_review.py"
+chmod +x "$SCRIPTS_DIR/postprocess_review.py"
 
 # Check for a Python interpreter
 if command -v python3 >/dev/null 2>&1; then

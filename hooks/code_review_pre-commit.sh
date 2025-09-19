@@ -212,6 +212,36 @@ PROMPT
 
   mv -f "$tmp_out" "$out"
   log_stage "Async review: review output updated"
+
+  postprocess_helper=""
+  if [ -f "${repo_path}/scripts/postprocess_review.py" ]; then
+    postprocess_helper="${repo_path}/scripts/postprocess_review.py"
+  elif [ -f "${HOME}/.git-hooks-code-review/scripts/postprocess_review.py" ]; then
+    postprocess_helper="${HOME}/.git-hooks-code-review/scripts/postprocess_review.py"
+  fi
+
+  if [ -n "$postprocess_helper" ]; then
+    python_cmd=""
+    if need python3; then
+      python_cmd="python3"
+    elif need python; then
+      python_cmd="python"
+    fi
+
+    if [ -n "$python_cmd" ]; then
+      log_stage "Async review: running suggestion post-processor"
+      if "$python_cmd" "$postprocess_helper" --review "$out" --repo "$repo_path" >>"$LOG_FILE" 2>&1; then
+        log_stage "Async review: suggestion post-processing completed"
+      else
+        log_stage "Async review: suggestion post-processing failed (see log)"
+      fi
+    else
+      log_stage "Async review: skipping suggestion post-processing (no Python interpreter)"
+    fi
+  else
+    log_stage "Async review: no suggestion post-processor available"
+  fi
+
   log_stage "Async review worker finished"
 )
 
