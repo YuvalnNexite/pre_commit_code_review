@@ -72,8 +72,10 @@ can resume later. While reviewing a finding press:
 
 * `n` – mark the finding as acknowledged and jump to the next one.
 * `o` – open `$EDITOR` at the cited file and line numbers.
-* `f` – ask `gemini` (falls back to `cursor-agent`) to draft a patch.
-* `a` – preview the stored patch and apply it with `git apply`.
+* `f` – ask `gemini` (falls back to `cursor-agent`) to draft a patch and view the
+  response in a separate terminal window.
+* `a` – preview the stored patch or the review’s suggested diff and apply it with
+  `git apply`.
 * `p` – revisit the previous finding, `q` – exit the helper.
 
 The fix command automatically detects the same CLI tools as the pre-commit

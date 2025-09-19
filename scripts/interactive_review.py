@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 from dataclasses import dataclass
 from hashlib import sha256
@@ -37,10 +38,26 @@ class Finding:
     function: str = ""
 
 
-def need(command: str) -> bool:
-    """Return True when the command exists on PATH (gemini/cursor detection)."""
+def resolve_command(command: str) -> Optional[str]:
+    """Return the absolute command path if available on PATH."""
 
-    return shutil.which(command) is not None
+    return shutil.which(command)
+
+
+def build_command(binary: str, *args: str) -> Optional[List[str]]:
+    """Return an invocation list that works on the current platform."""
+
+    resolved = resolve_command(binary)
+    if not resolved:
+        return None
+
+    if os.name == "nt":
+        suffix = Path(resolved).suffix.lower()
+        if suffix in {".cmd", ".bat"}:
+            comspec = os.environ.get("COMSPEC", "cmd.exe")
+            return [comspec, "/c", resolved, *args]
+
+    return [resolved, *args]
 
 
 def find_repo_root() -> Path:
@@ -233,7 +250,12 @@ def ensure_state_for_findings(
     for finding in findings:
         findings_state.setdefault(
             finding.identifier,
-            {"status": "pending", "last_ai_output": "", "last_patch": ""},
+            {
+                "status": "pending",
+                "last_ai_output": "",
+                "last_patch": "",
+                "last_patch_source": "",
+            },
         )
 
     state["findings"] = findings_state
@@ -353,11 +375,24 @@ def run_ai_fix(repo_root: Path, finding: Finding) -> Optional[str]:
 
     prompt = build_fix_prompt(repo_root, finding)
 
-    if need("gemini"):
-        command = ["gemini", "--approval-mode", "auto_edit", "-m", "gemini-2.5-pro"]
-    elif need("cursor-agent"):
-        command = ["cursor-agent", "-f", "--output-format", "text"]
+    tool_name: Optional[str] = None
+    command: Optional[List[str]] = None
+
+    gemini_command = build_command(
+        "gemini", "--approval-mode", "auto_edit", "-m", "gemini-2.5-pro"
+    )
+    if gemini_command:
+        tool_name = "gemini"
+        command = gemini_command
     else:
+        cursor_command = build_command(
+            "cursor-agent", "-f", "--output-format", "text"
+        )
+        if cursor_command:
+            tool_name = "cursor-agent"
+            command = cursor_command
+
+    if not command or not tool_name:
         print("No supported AI CLI (gemini or cursor-agent) found on PATH.")
         return None
 
@@ -371,32 +406,42 @@ def run_ai_fix(repo_root: Path, finding: Finding) -> Optional[str]:
             check=False,
         )
     except OSError as exc:
-        print(f"Failed to execute {' '.join(command)}: {exc}")
+        print(f"Failed to execute {command[0]}: {exc}")
         return None
 
+    combined_output = process.stdout or ""
     if process.stderr:
         sys.stderr.write(process.stderr)
         sys.stderr.flush()
+        if combined_output:
+            combined_output += "\n"
+        combined_output += process.stderr
 
     if process.returncode != 0:
-        print(f"AI command exited with status {process.returncode}.")
-        return None
+        print(f"{tool_name} exited with status {process.returncode}.")
+        if not combined_output:
+            return None
 
     output = process.stdout.strip()
     if not output:
         print("AI command returned no output.")
+        if combined_output:
+            show_text_in_new_terminal(combined_output)
         return None
 
-    print("Received response:\n")
-    print(output)
-    print()
+    if show_text_in_new_terminal(combined_output):
+        print("Opened AI response in a separate terminal window.")
+    else:
+        print("AI response:")
+        print(combined_output.strip() or output)
+
     return output
 
 
 def extract_patch(ai_output: str) -> Optional[str]:
     """Extract a diff block from the AI response."""
 
-    pattern = re.compile(r"```(?:diff)?\n(.*?)```", re.S)
+    pattern = re.compile(r"```(?:diff|patch|suggestion)?\n(.*?)```", re.S)
     match = pattern.search(ai_output)
     if not match:
         return None
@@ -405,6 +450,151 @@ def extract_patch(ai_output: str) -> Optional[str]:
     if not patch.endswith("\n"):
         patch += "\n"
     return patch
+
+
+def powershell_quote(text: str) -> str:
+    """Quote a string for use in PowerShell single-quoted literals."""
+
+    return "'" + text.replace("'", "''") + "'"
+
+
+def show_text_in_new_terminal(text: str) -> bool:
+    """Display the provided text in a freshly opened terminal window."""
+
+    cleaned = text.strip()
+    if not cleaned:
+        return False
+
+    output_path: Optional[Path] = None
+    script_path: Optional[Path] = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", delete=False, encoding="utf-8", suffix=".txt"
+        ) as handle:
+            handle.write(cleaned)
+            output_path = Path(handle.name)
+    except OSError as exc:
+        print(f"Failed to prepare output viewer: {exc}")
+        return False
+
+    try:
+        if os.name == "nt":
+            powershell = (
+                resolve_command("powershell.exe")
+                or resolve_command("pwsh")
+                or resolve_command("powershell")
+            )
+            if not powershell:
+                raise RuntimeError("PowerShell was not found on PATH.")
+
+            script_path = output_path.with_suffix(".ps1")
+            script_content = textwrap.dedent(
+                f"""
+                $ErrorActionPreference = 'SilentlyContinue'
+                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                $outputPath = {powershell_quote(str(output_path))}
+                if (Test-Path -LiteralPath $outputPath) {{
+                    Get-Content -Raw -Encoding UTF8 -LiteralPath $outputPath
+                }} else {{
+                    Write-Host 'AI output file not found.'
+                }}
+                Write-Host ''
+                Write-Host 'Press Enter to close this window...'
+                [void][System.Console]::ReadLine()
+                Remove-Item -ErrorAction SilentlyContinue -LiteralPath $outputPath
+                Remove-Item -ErrorAction SilentlyContinue -LiteralPath $MyInvocation.MyCommand.Path
+                """
+            ).strip()
+            script_path.write_text(script_content + "\n", encoding="utf-8")
+            creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+            subprocess.Popen(  # pylint: disable=consider-using-with
+                [powershell, "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+                creationflags=creationflags,
+            )
+            return True
+
+        script_path = output_path.with_suffix(".sh")
+        output_quoted = shlex.quote(str(output_path))
+        script_content = textwrap.dedent(
+            f"""
+            #!/usr/bin/env bash
+            set -e
+            if [ -f {output_quoted} ]; then
+                cat {output_quoted}
+            else
+                echo "AI output file not found."
+            fi
+            echo
+            read -r -p "Press Enter to close this window..." _
+            rm -f {output_quoted}
+            rm -f -- "$0"
+            """
+        ).strip()
+        script_path.write_text(script_content + "\n", encoding="utf-8")
+        script_path.chmod(0o700)
+
+        launched = False
+
+        if sys.platform == "darwin":
+            osa_command = (
+                "tell application \"Terminal\"\n"
+                "activate\n"
+                f"do script \"bash {shlex.quote(str(script_path))}\"\n"
+                "end tell"
+            )
+            try:
+                subprocess.Popen(["osascript", "-e", osa_command])
+                launched = True
+            except OSError:
+                launched = False
+
+        if not launched:
+            terminal_candidates = [
+                ("x-terminal-emulator", "-e"),
+                ("gnome-terminal", "--"),
+                ("konsole", "-e"),
+                ("xfce4-terminal", "-e"),
+                ("mate-terminal", "-e"),
+                ("alacritty", "-e"),
+                ("kitty", "-e"),
+                ("terminator", "-e"),
+                ("tilix", "-e"),
+                ("xterm", "-e"),
+            ]
+            for binary, option in terminal_candidates:
+                terminal = resolve_command(binary)
+                if not terminal:
+                    continue
+                cmd = [terminal, option]
+                if option == "--":
+                    cmd.extend(["bash", str(script_path)])
+                else:
+                    cmd.extend(["bash", str(script_path)])
+                try:
+                    subprocess.Popen(cmd)
+                    launched = True
+                    break
+                except OSError:
+                    continue
+
+        if not launched:
+            raise RuntimeError("No supported terminal emulator found.")
+
+        return True
+    except Exception as exc:  # pylint: disable=broad-except
+        for path in (output_path, script_path):
+            if path is None:
+                continue
+            try:
+                path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            except Exception:  # pylint: disable=broad-except
+                pass
+        print(
+            f"Could not open a new terminal window ({exc}). Showing output inline."
+        )
+        return False
+
 
 
 def apply_patch(repo_root: Path, patch: str) -> bool:
@@ -528,8 +718,8 @@ def interactive_loop(repo_root: Path, findings: List[Finding], state: Dict[str, 
                 "Commands:\n"
                 "  n / next    Mark as acknowledged and move to the next finding.\n"
                 "  o / open    Open the file in $EDITOR at the referenced location.\n"
-                "  f / fix     Ask gemini or cursor-agent to propose a patch.\n"
-                "  a / apply   Apply the stored patch with git apply.\n"
+                "  f / fix     Ask gemini or cursor-agent for a patch (opens in a new terminal).\n"
+                "  a / apply   Apply the stored patch or the review suggestion diff.\n"
                 "  p / prev    Revisit the previous finding.\n"
                 "  q / quit    Exit the reviewer.\n"
             )
@@ -555,19 +745,36 @@ def interactive_loop(repo_root: Path, findings: List[Finding], state: Dict[str, 
                 entry["last_ai_output"] = ai_output
                 if patch:
                     entry["last_patch"] = patch
+                    entry["last_patch_source"] = "ai"
                     print("Stored diff for later application (use 'a' to apply).")
                 else:
+                    entry["last_patch"] = ""
+                    entry["last_patch_source"] = ""
                     print("No diff block detected in AI output.")
             findings_state[finding.identifier] = entry
             save_state(repo_root / "auto_code_review_state.json", state)
             continue
 
         if command in {"a", "apply"}:
-            patch = entry.get("last_patch")
+            patch = entry.get("last_patch") or ""
+            patch_source = entry.get("last_patch_source") or ""
             if not patch:
-                print("No stored patch is available. Run 'f' first to request one.")
-                continue
-            print("Patch preview:\n")
+                suggestion_patch = extract_patch(finding.suggestion)
+                if suggestion_patch:
+                    patch = suggestion_patch
+                    patch_source = "suggestion"
+                    entry["last_patch"] = patch
+                    entry["last_patch_source"] = patch_source
+                else:
+                    print(
+                        "No stored patch or review suggestion diff is available."
+                    )
+                    continue
+
+            source_label = (
+                "review suggestion" if patch_source == "suggestion" else "stored diff"
+            )
+            print(f"Patch preview ({source_label}):\n")
             print(patch)
             confirm = input("Apply this patch? [y/N]: ").strip().lower()
             if confirm != "y":
@@ -575,6 +782,7 @@ def interactive_loop(repo_root: Path, findings: List[Finding], state: Dict[str, 
                 continue
             if apply_patch(repo_root, patch):
                 entry["status"] = "fixed"
+                entry["last_patch_source"] = patch_source
                 findings_state[finding.identifier] = entry
                 index += 1
             state["current_index"] = index
