@@ -16,6 +16,8 @@ cp pre_commit_code_review/hooks/code_review_pre-commit.sh .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 mkdir -p code_review_memory
 cp <root>/code_review_memory/* code_review_memory/
+mkdir -p scripts
+cp pre_commit_code_review/scripts/interactive_review_helper.py scripts/
 ```
 
 ### Uninstallation
@@ -51,7 +53,17 @@ curl https://cursor.com/install -fsS | bash
 
 If the generated `auto_code_review.md` report contains issues that were marked
 as **BAD**, you can walk through them interactively and optionally launch an AI
-assistant to implement the fixes by running:
+assistant to implement the fixes. When you use the one-line installer the
+helper script is downloaded to `~/.git-hooks-code-review/scripts`, so you can
+run it from any repository with:
+
+```bash
+python ~/.git-hooks-code-review/scripts/interactive_review_helper.py
+```
+
+If you copied the helper into your repository (see the manual installation
+instructions above) the local path is the same command shown by the review
+report:
 
 ```bash
 python scripts/interactive_review_helper.py
@@ -68,6 +80,20 @@ python scripts/interactive_review_helper.py \
 ```
 
 Use `--help` to see all available options.
+
+### Optional: Obsidian deep-link support
+
+The review header can also include an Obsidian-friendly launcher. Configure a
+template that describes how your Obsidian setup should receive the command:
+
+```bash
+git config --global codeReview.obsidianUriTemplate \
+  'obsidian://advanced-uri?vault=YOUR_VAULT&clipboard={command}'
+```
+
+The placeholder `{command}` is replaced with a URL-encoded version of the
+suggested helper command, and `{command_raw}` (if present) is replaced with the
+unencoded variant. Adjust the URI to match the plugins you use inside Obsidian.
 
 ## Memory Usage
 To use the persistent memory feature put a code_review_memory directory in the project root and follow the template to create consept.md memory files.

@@ -146,20 +146,80 @@ PROMPT
     fi
   } >> "$tmp_out"
 
+  escape_for_json() {
+    local input="$1"
+    input="${input//\\/\\\\}"
+    input="${input//\"/\\\"}"
+    printf '%s' "$input"
+  }
+
+  urlencode() {
+    local string="$1"
+    local encoded=""
+    local pos char ascii
+    for ((pos = 0; pos < ${#string}; pos++)); do
+      char="${string:pos:1}"
+      case "$char" in
+        [a-zA-Z0-9.~_-]) encoded+="$char" ;;
+        ' ') encoded+="%20" ;;
+        *) printf -v ascii '%%%02X' "'$char"; encoded+="$ascii" ;;
+      esac
+    done
+    printf '%s' "$encoded"
+  }
+
+  python_cmd="python3"
+  if ! need python3; then
+    if need python; then
+      python_cmd="python"
+    fi
+  fi
+
+  helper_script=""
+  if [ -f "scripts/interactive_review_helper.py" ]; then
+    helper_script="scripts/interactive_review_helper.py"
+  elif [ -f "$HOME/.git-hooks-code-review/scripts/interactive_review_helper.py" ]; then
+    helper_script="$HOME/.git-hooks-code-review/scripts/interactive_review_helper.py"
+  fi
+
+  if [ -n "$helper_script" ]; then
+    helper_command="$python_cmd \"$helper_script\""
+  else
+    helper_command="$python_cmd scripts/interactive_review_helper.py"
+  fi
+
+  helper_command_json="$(escape_for_json "$helper_command")"
+  vscode_payload="{\"text\":\"${helper_command_json}\\n\"}"
+  vscode_uri="command:workbench.action.terminal.sendSequence?$(urlencode "$vscode_payload")"
+
+  obsidian_template="$(git config --get codeReview.obsidianUriTemplate 2>/dev/null || true)"
+  obsidian_link=""
+  if [ -n "$obsidian_template" ]; then
+    encoded_obsidian_command="$(urlencode "$helper_command")"
+    obsidian_link="${obsidian_template//\{command\}/$encoded_obsidian_command}"
+    obsidian_link="${obsidian_link//\{command_raw\}/$helper_command}"
+  fi
+
   add_interactive_hint() {
-    local tmp_header
+    local target tmp_header
+    target="$1"
     tmp_header="$(mktemp)"
-    cat >"$tmp_header" <<'HINT'
+    {
+      cat <<HINT
 <div align="right">
-  <a href="command:workbench.action.terminal.sendSequence?%7B%22text%22%3A%22python%20scripts/interactive_review_helper.py%5Cn%22%7D" style="display:inline-block;padding:6px 12px;border-radius:6px;background:#0366d6;color:#fff;text-decoration:none;font-weight:600;">Launch interactive fixer</a>
+  <a href="$vscode_uri" style="display:inline-block;padding:6px 12px;border-radius:6px;background:#0366d6;color:#fff;text-decoration:none;font-weight:600;">Launch interactive fixer (VS Code)</a>
 </div>
 
 > [!TIP]
-> Run `python scripts/interactive_review_helper.py` to review BAD findings interactively.
-
+> Run \`$helper_command\` to review BAD findings interactively.
 HINT
-    cat "$1" >>"$tmp_header"
-    mv -f "$tmp_header" "$1"
+      if [ -n "$obsidian_link" ]; then
+        printf '> Obsidian: [Launch interactive fixer](%s)\n' "$obsidian_link"
+      fi
+      printf '\n'
+      cat "$target"
+    } >"$tmp_header"
+    mv -f "$tmp_header" "$target"
   }
 
   add_interactive_hint "$tmp_out"

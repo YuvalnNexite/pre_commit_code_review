@@ -22,6 +22,13 @@ curl -fsSL "${RAW_BASE}/hooks/${HOOK_NAME}" -o "$GLOBAL_HOOKS_DIR/pre-commit"
 # Make it executable
 chmod +x "$GLOBAL_HOOKS_DIR/pre-commit"
 
+# Fetch interactive helper script so the generated link always works
+echo "Downloading interactive helper..."
+mkdir -p "$GLOBAL_HOOKS_DIR/scripts"
+curl -fsSL "${RAW_BASE}/scripts/interactive_review_helper.py" \
+  -o "$GLOBAL_HOOKS_DIR/scripts/interactive_review_helper.py"
+chmod +x "$GLOBAL_HOOKS_DIR/scripts/interactive_review_helper.py"
+
 # Set global git hooks path
 echo "Configuring git to use global hooks..."
 git config --global core.hooksPath "$GLOBAL_HOOKS_DIR"
@@ -39,6 +46,7 @@ echo "Next steps:"
 echo "1. Install dependencies: pip install flake8"
 echo "2. Install Gemini CLI: npm install -g @google/generative-ai-cli"
 echo "3. Configure Gemini: gemini config set apiKey YOUR_API_KEY"
+echo "4. Interactive helper available at: $GLOBAL_HOOKS_DIR/scripts/interactive_review_helper.py"
 echo ""
 echo "The hook will now run on every commit in ALL repositories!"
 echo ""
