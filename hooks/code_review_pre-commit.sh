@@ -129,7 +129,14 @@ Structure your report exactly as follows:
 **function:** function/CTE name in the file\
 **Lines:** Lines changed in the diff, e.g., '10-15'\
 **Details:** If the assessment is 'BAD', provide a detailed analysis of the problem. If the assessment is 'GOOD', provide a *very brief* one-line confirmation, e.g., 'change from hard coded filtering to dynamic is good.'\
-**Suggestion (if 'BAD'):** Provide a specific, actionable recommendation with a concrete minimal diff code snippet.\
+**Suggestion (if 'BAD'):** Provide a specific, actionable recommendation as a single fenced ```diff` block that starts with `diff --git a/<file> b/<file>` and includes a matching `@@` hunk header. Do not include any text before or after this block.\
+*Example structure (your output must mirror this shape without the surrounding prose):*\
+```diff
+diff --git a/path/to/file.py b/path/to/file.py
+@@ -10,7 +10,7 @@
+-old line
++new line
+```
 **Reasoning (if 'BAD'):** Explain why the issue is a problem and why the suggested change is beneficial (e.g., \'This prevents a potential 'NullPointerException' and makes the function more robust.\').\
 
 ---
