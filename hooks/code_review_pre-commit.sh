@@ -1,10 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+LOG_DIR="${HOME}/.git-hooks-code-review"
+LOG_FILE="${LOG_DIR}/code_review_progress.log"
+
+log_stage() {
+  local stage="$1"
+  local timestamp
+  timestamp="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
+  {
+    printf '%s - %s\n' "$timestamp" "$stage"
+  } >> "$LOG_FILE" 2>/dev/null || true
+}
+
 need() { command -v "$1" >/dev/null 2>&1; }
+repo_path="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+log_stage "Pre-commit hook triggered for repository: ${repo_path}"
 diff_text="$(git diff -U100000 HEAD --no-color || true)"
+log_stage "Captured diff for review (length: ${#diff_text} characters)"
 
 run_review_async() (
+  log_stage "Async review worker started"
   # Run in a subshell so we can background cleanly
   out="auto_code_review.md"
   echo "_Review running..._" > "$out"
@@ -33,8 +50,10 @@ run_review_async() (
   # Capture the diff up front (no colors to keep prompt clean)
 
   if [ -z "$diff_text" ]; then
+    log_stage "Async review: no diff detected - writing placeholder output"
     printf "_Nothing to review: no diff from HEAD._\n" > "$tmp_out"
   else
+    log_stage "Async review: building review prompt"
     # Build the full prompt with the diff inlined
     cat > "$tmp_prompt" <<'PROMPT'
 Act as a hyper-critical senior code reviewer. Your primary mission is to find and report errors, logical flaws, and deviations from best practices. Your feedback should be direct and focus on what needs to be fixed.
@@ -110,27 +129,37 @@ PROMPT
 
     # Run AI review: try Gemini first; on failure, try Cursor (cursor-agent)
     if need gemini; then
+      log_stage "Async review: invoking Gemini CLI"
       if gemini --approval-mode "auto_edit" -m gemini-2.5-pro < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+        log_stage "Async review: Gemini review completed successfully"
         write_ai_success
       elif need cursor-agent; then
+        log_stage "Async review: Gemini review failed - attempting Cursor CLI"
         if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+          log_stage "Async review: Cursor review completed successfully"
           write_ai_success
         else
+          log_stage "Async review: Cursor review failed"
           printf "_Cursor review failed._\n" > "$tmp_out"
           append_ai_stderr
         fi
       else
+        log_stage "Async review: Gemini review failed and Cursor CLI not found"
         printf "_Gemini review failed and no Cursor CLI found._\n" > "$tmp_out"
         append_ai_stderr
       fi
     elif need cursor-agent; then
+      log_stage "Async review: invoking Cursor CLI"
       if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+        log_stage "Async review: Cursor review completed successfully"
         write_ai_success
       else
+        log_stage "Async review: Cursor review failed"
         printf "_Cursor review failed._\n" > "$tmp_out"
         append_ai_stderr
       fi
     else
+      log_stage "Async review: no supported AI CLI found - skipping review"
       printf "_Skipped AI review (no supported CLI found: gemini, cursor-agent)_\n" > "$tmp_out"
     fi
   fi
@@ -139,6 +168,7 @@ PROMPT
     echo
     echo '---'
     echo '## Flake8'
+    log_stage "Async review: running flake8 checks"
     if need flake8; then
       flake8 --format="- **%(path)s** (Line: %(row)d, Col: %(col)d) - \`%(code)s\`: %(text)s" || true
     else
@@ -146,10 +176,17 @@ PROMPT
     fi
   } >> "$tmp_out"
 
+  log_stage "Async review: flake8 step completed"
+
   mv -f "$tmp_out" "$out"
+  log_stage "Async review: review output updated"
+  log_stage "Async review worker finished"
 )
 
 # Fire-and-forget: do the heavy work in the background so the commit proceeds immediately
 (run_review_async) >/dev/null 2>&1 &
+review_pid=$!
+log_stage "Background review process started (PID: ${review_pid})"
 
+log_stage "Pre-commit hook completed; review continues in background"
 exit 0
