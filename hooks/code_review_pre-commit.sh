@@ -2,6 +2,8 @@
 set -euo pipefail
 
 need() { command -v "$1" >/dev/null 2>&1; }
+
+GLOBAL_HOOKS_DIR="${GLOBAL_HOOKS_DIR:-$HOME/.git-hooks-code-review}"
 diff_text="$(git diff -U100000 HEAD --no-color || true)"
 
 run_review_async() (
@@ -16,12 +18,23 @@ run_review_async() (
 
   append_ai_stderr() {
     if [ -s "$tmp_stderr" ]; then
-      {
-        echo
-        echo '---'
-        echo '## AI stderr'
-        cat "$tmp_stderr"
-      } >> "$tmp_out"
+      if mkdir -p "$GLOBAL_HOOKS_DIR" 2>/dev/null; then
+        stderr_log="$GLOBAL_HOOKS_DIR/ai_stderr.log"
+        {
+          printf '---\n'
+          printf 'Timestamp: %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          cat "$tmp_stderr"
+          printf '\n'
+        } >> "$stderr_log"
+        printf '_AI stderr saved to %s._\n' "$stderr_log" >> "$tmp_out"
+      else
+        {
+          echo
+          echo '---'
+          echo '## AI stderr'
+          cat "$tmp_stderr"
+        } >> "$tmp_out"
+      fi
     fi
   }
 
