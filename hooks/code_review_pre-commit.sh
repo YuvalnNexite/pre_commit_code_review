@@ -3,6 +3,7 @@ set -euo pipefail
 
 LOG_DIR="${HOME}/.git-hooks-code-review"
 LOG_FILE="${LOG_DIR}/code_review_progress.log"
+AI_STDERR_LOG="${LOG_DIR}/ai_stdder.log"
 
 log_stage() {
   local stage="$1"
@@ -12,6 +13,22 @@ log_stage() {
   {
     printf '%s - %s\n' "$timestamp" "$stage"
   } >> "$LOG_FILE" 2>/dev/null || true
+}
+
+log_ai_stderr() {
+  local context="$1"
+  local stderr_file="$2"
+
+  if [ -s "$stderr_file" ]; then
+    local timestamp
+    timestamp="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    {
+      printf '%s - %s\n' "$timestamp" "$context"
+      cat "$stderr_file"
+      printf '\n'
+    } >> "$AI_STDERR_LOG" 2>/dev/null || true
+  fi
 }
 
 need() { command -v "$1" >/dev/null 2>&1; }
@@ -31,20 +48,10 @@ run_review_async() (
   tmp_stderr="$(mktemp)"
   trap 'rm -f "$tmp_out" "$tmp_prompt" "$tmp_stdout" "$tmp_stderr" 2>/dev/null' EXIT
 
-  append_ai_stderr() {
-    if [ -s "$tmp_stderr" ]; then
-      {
-        echo
-        echo '---'
-        echo '## AI stderr'
-        cat "$tmp_stderr"
-      } >> "$tmp_out"
-    fi
-  }
-
   write_ai_success() {
+    local context="$1"
     cat "$tmp_stdout" > "$tmp_out"
-    append_ai_stderr
+    log_ai_stderr "$context" "$tmp_stderr"
   }
 
   # Capture the diff up front (no colors to keep prompt clean)
@@ -132,31 +139,32 @@ PROMPT
       log_stage "Async review: invoking Gemini CLI"
       if gemini --approval-mode "auto_edit" -m gemini-2.5-pro < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
         log_stage "Async review: Gemini review completed successfully"
-        write_ai_success
+        write_ai_success "Gemini review"
       elif need cursor-agent; then
         log_stage "Async review: Gemini review failed - attempting Cursor CLI"
+        log_ai_stderr "Gemini review stderr (failure)" "$tmp_stderr"
         if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
           log_stage "Async review: Cursor review completed successfully"
-          write_ai_success
+          write_ai_success "Cursor review"
         else
           log_stage "Async review: Cursor review failed"
           printf "_Cursor review failed._\n" > "$tmp_out"
-          append_ai_stderr
+          log_ai_stderr "Cursor review stderr (failure)" "$tmp_stderr"
         fi
       else
         log_stage "Async review: Gemini review failed and Cursor CLI not found"
         printf "_Gemini review failed and no Cursor CLI found._\n" > "$tmp_out"
-        append_ai_stderr
+        log_ai_stderr "Gemini review stderr (failure)" "$tmp_stderr"
       fi
     elif need cursor-agent; then
       log_stage "Async review: invoking Cursor CLI"
       if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
         log_stage "Async review: Cursor review completed successfully"
-        write_ai_success
+        write_ai_success "Cursor review"
       else
         log_stage "Async review: Cursor review failed"
         printf "_Cursor review failed._\n" > "$tmp_out"
-        append_ai_stderr
+        log_ai_stderr "Cursor review stderr (failure)" "$tmp_stderr"
       fi
     else
       log_stage "Async review: no supported AI CLI found - skipping review"
