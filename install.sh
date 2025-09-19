@@ -7,6 +7,7 @@ SOURCE_REPO="YuvalnNexite/pre_commit_code_review"
 RAW_BASE="https://raw.githubusercontent.com/${SOURCE_REPO}/main"
 
 HOOK_NAME="code_review_pre-commit.sh"
+FORMATTER_PATH="scripts/post_review_formatting"
 GLOBAL_HOOKS_DIR="$HOME/.git-hooks-code-review"
 
 echo "Installing pre-commit code review hook globally..."
@@ -21,6 +22,12 @@ curl -fsSL "${RAW_BASE}/hooks/${HOOK_NAME}" -o "$GLOBAL_HOOKS_DIR/pre-commit"
 
 # Make it executable
 chmod +x "$GLOBAL_HOOKS_DIR/pre-commit"
+
+# Download the post-review formatter helper
+echo "Downloading post-review formatter..."
+mkdir -p "$GLOBAL_HOOKS_DIR/scripts"
+curl -fsSL "${RAW_BASE}/${FORMATTER_PATH}" -o "$GLOBAL_HOOKS_DIR/${FORMATTER_PATH}"
+chmod +x "$GLOBAL_HOOKS_DIR/${FORMATTER_PATH}"
 
 # Set global git hooks path
 echo "Configuring git to use global hooks..."

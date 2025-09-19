@@ -211,6 +211,24 @@ PROMPT
   log_stage "Async review: flake8 step completed"
 
   mv -f "$tmp_out" "$out"
+  formatter=""
+  for candidate in \
+    "${repo_path}/scripts/post_review_formatting" \
+    "${HOME}/.git-hooks-code-review/scripts/post_review_formatting"; do
+    if [ -z "$formatter" ] && [ -x "$candidate" ]; then
+      formatter="$candidate"
+    fi
+  done
+  if [ -n "$formatter" ]; then
+    log_stage "Async review: running post-review formatter (${formatter})"
+    if "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
+      log_stage "Async review: formatter completed successfully"
+    else
+      log_stage "Async review: formatter encountered an error"
+    fi
+  else
+    log_stage "Async review: post-review formatter not found"
+  fi
   log_stage "Async review: review output updated"
   log_stage "Async review worker finished"
 )

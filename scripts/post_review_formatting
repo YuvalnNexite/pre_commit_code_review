@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+"""Post-process auto_code_review.md to improve readability and usability.
+
+The script focuses on cleaning the automatically generated review so that it is
+ easier for humans to consume and simpler to apply suggested patches.
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
+
+FORMATTING_RULES: Sequence[str] = (
+    "Strip AI-internal cues such as \"(if 'BAD')\" or \"(if 'GOOD')\" from labels.",
+    "Remove prompt artefacts like the repeating-structure markers or the `**critical:**` hint.",
+    "Normalise whitespace (Unix line endings, collapse excessive blank lines, ensure trailing newline).",
+    "Rewrite `diff` code fences into git-apply-friendly patches by adding `---/+++` headers using the reported file path.",
+    "Synthesise `@@` hunk headers from the reported line range when they are missing so the diff is structured.",
+)
+
+RULES_COMMENT_TEMPLATE = """<!-- post_review_formatting formatting rules:\n{body}-->\n"""
+
+RULES_COMMENT_BODY = "\n".join(f"- {rule}" for rule in FORMATTING_RULES)
+
+RULES_COMMENT = RULES_COMMENT_TEMPLATE.format(body=RULES_COMMENT_BODY + "\n")
+
+AI_INSTRUCTION_PATTERN = re.compile(r"\(if ['\"]?(?:BAD|GOOD|NEUTRAL)['\"]?\)", re.IGNORECASE)
+REPEATING_STRUCTURE_PATTERN = re.compile(r"^--\s*(?:start|end) of repeating structure --$", re.IGNORECASE)
+CRITICAL_PATTERN = re.compile(r"^\*\*critical:\*\*.*", re.IGNORECASE)
+
+FILE_LINE_PATTERN = re.compile(r"^\*\*file:\*\*\s*(.+)$", re.IGNORECASE)
+LINES_PATTERN = re.compile(
+    r"^\*\*Lines:\*\*\s*(?P<start>\d+)(?:\s*[-–]\s*(?P<end>\d+))?",
+    re.IGNORECASE,
+)
+
+
+class FormattingError(RuntimeError):
+    """Custom error raised when formatting fails."""
+
+
+def read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FormattingError(f"File not found: {path}") from exc
+
+
+def normalise_whitespace(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Collapse runs of more than two blank lines into exactly two.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    # Ensure we end with a single newline
+    if not text.endswith("\n"):
+        text += "\n"
+    return text
+
+
+def remove_ai_instructions(lines: Sequence[str]) -> List[str]:
+    cleaned: List[str] = []
+    for line in lines:
+        stripped_instruction = AI_INSTRUCTION_PATTERN.sub("", line)
+        if REPEATING_STRUCTURE_PATTERN.match(stripped_instruction.strip()):
+            continue
+        if CRITICAL_PATTERN.match(stripped_instruction.strip()):
+            continue
+        stripped_instruction = re.sub(
+            r"(\*\*[^*]+?)\s+(:\*\*)",
+            r"\1\2",
+            stripped_instruction,
+        )
+        cleaned.append(stripped_instruction)
+    return cleaned
+
+
+def ensure_rules_comment(text: str) -> str:
+    marker = "<!-- post_review_formatting formatting rules:"
+    if marker in text:
+        # Replace existing block
+        return re.sub(
+            r"<!-- post_review_formatting formatting rules:.*?-->\n?",
+            RULES_COMMENT,
+            text,
+            flags=re.DOTALL,
+        )
+    return RULES_COMMENT + text.lstrip()
+
+
+def parse_line_range(metadata: Optional[str]) -> Optional[Tuple[int, int]]:
+    if not metadata:
+        return None
+    match = LINES_PATTERN.match(metadata)
+    if not match:
+        return None
+    start = int(match.group("start"))
+    end_str = match.group("end")
+    if end_str:
+        end = int(end_str)
+    else:
+        end = start
+    count = max(end - start + 1, 1)
+    return start, count
+
+
+def synthesize_hunk_header(line_range: Optional[Tuple[int, int]]) -> str:
+    if line_range is None:
+        return "@@"
+    start, count = line_range
+    return f"@@ -{start},{count} +{start},{count} @@"
+
+
+def format_code_blocks(lines: Sequence[str]) -> List[str]:
+    formatted: List[str] = []
+    idx = 0
+    current_file: Optional[str] = None
+    current_line_metadata: Optional[str] = None
+
+    while idx < len(lines):
+        line = lines[idx]
+        stripped = line.strip()
+
+        if stripped.startswith("### ") or stripped.startswith("## "):
+            current_file = None
+            current_line_metadata = None
+
+        file_match = FILE_LINE_PATTERN.match(stripped)
+        if file_match:
+            current_file = file_match.group(1).strip()
+        lines_match = LINES_PATTERN.match(stripped)
+        if lines_match:
+            current_line_metadata = stripped
+
+        fence_match = re.match(r"```(\w+)?", stripped)
+        if fence_match:
+            language = (fence_match.group(1) or "").lower()
+            block_lines: List[str] = []
+            idx += 1
+            while idx < len(lines):
+                candidate = lines[idx]
+                if candidate.strip() == "```":
+                    break
+                block_lines.append(candidate)
+                idx += 1
+            closing_fence = idx < len(lines)
+            # Process the block
+            processed_block = process_code_block(
+                language,
+                block_lines,
+                current_file,
+                parse_line_range(current_line_metadata),
+            )
+            formatted.append(f"```{language}".rstrip())
+            formatted.extend(processed_block)
+            formatted.append("```")
+            if closing_fence:
+                idx += 1  # Skip the closing fence line
+            continue
+
+        formatted.append(line)
+        idx += 1
+
+    return formatted
+
+
+def process_code_block(
+    language: str,
+    block_lines: Sequence[str],
+    current_file: Optional[str],
+    line_range: Optional[Tuple[int, int]],
+) -> List[str]:
+    if language != "diff":
+        return list(block_lines)
+
+    trimmed_lines = list(block_lines)
+    while trimmed_lines and not trimmed_lines[0].strip():
+        trimmed_lines.pop(0)
+    while trimmed_lines and not trimmed_lines[-1].strip():
+        trimmed_lines.pop()
+
+    if not trimmed_lines:
+        return list(block_lines)
+
+    header_present = any(line.startswith("--- ") for line in trimmed_lines) and any(
+        line.startswith("+++ ") for line in trimmed_lines
+    )
+
+    hunk_present = any(line.startswith("@@") for line in trimmed_lines)
+
+    additions: List[str] = []
+    if not header_present and current_file:
+        normalized_path = current_file.strip().strip('`')
+        additions.extend([f"--- a/{normalized_path}", f"+++ b/{normalized_path}"])
+
+    if not hunk_present:
+        additions.append(synthesize_hunk_header(line_range))
+
+    # Ensure we do not duplicate headers if they were already present.
+    if additions:
+        trimmed_lines = additions + trimmed_lines
+
+    return trimmed_lines
+
+
+def apply_transformations(text: str) -> str:
+    lines = text.splitlines()
+    lines = remove_ai_instructions(lines)
+    lines = format_code_blocks(lines)
+    text = "\n".join(lines)
+    text = normalise_whitespace(text)
+    text = ensure_rules_comment(text)
+    return text
+
+
+def format_review(review_path: Path) -> bool:
+    try:
+        original_text = read_text(review_path)
+    except FormattingError:
+        return False
+
+    formatted_text = apply_transformations(original_text)
+    if formatted_text != original_text:
+        review_path.write_text(formatted_text, encoding="utf-8")
+        return True
+    return False
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Clean up the generated auto_code_review.md for readability",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default="auto_code_review.md",
+        help="Path to the review file (default: auto_code_review.md)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+    review_path = Path(args.path)
+    if not review_path.is_absolute():
+        review_path = Path.cwd() / review_path
+
+    if not review_path.exists():
+        # Silently succeed if the review file does not exist (e.g., when no diff).
+        return 0
+
+    changed = format_review(review_path)
+    if changed:
+        print(f"post_review_formatting: formatted {review_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
