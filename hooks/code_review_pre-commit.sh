@@ -146,6 +146,23 @@ PROMPT
     fi
   } >> "$tmp_out"
 
+  add_interactive_hint() {
+    local tmp_header
+    tmp_header="$(mktemp)"
+    cat >"$tmp_header" <<'HINT'
+<div align="right">
+  <a href="command:workbench.action.terminal.sendSequence?%7B%22text%22%3A%22python%20scripts/interactive_review_helper.py%5Cn%22%7D" style="display:inline-block;padding:6px 12px;border-radius:6px;background:#0366d6;color:#fff;text-decoration:none;font-weight:600;">Launch interactive fixer</a>
+</div>
+
+> [!TIP]
+> Run `python scripts/interactive_review_helper.py` to review BAD findings interactively.
+
+HINT
+    cat "$1" >>"$tmp_header"
+    mv -f "$tmp_header" "$1"
+  }
+
+  add_interactive_hint "$tmp_out"
   mv -f "$tmp_out" "$out"
 )
 

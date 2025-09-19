@@ -47,6 +47,28 @@ for macOS/Linux:
 curl https://cursor.com/install -fsS | bash
 ```
 
+## Interactive BAD assessment triage
+
+If the generated `auto_code_review.md` report contains issues that were marked
+as **BAD**, you can walk through them interactively and optionally launch an AI
+assistant to implement the fixes by running:
+
+```bash
+python scripts/interactive_review_helper.py
+```
+
+The helper presents each BAD assessment, lets you decide whether to escalate it
+to an AI, and when you choose `y` it prepares a detailed prompt and launches the
+configured CLI (Gemini by default in manual approval mode). You can customise
+the AI command with `--command` – for example, to invoke Cursor you might run:
+
+```bash
+python scripts/interactive_review_helper.py \
+  --command "cursor-agent --apply --prompt-file {prompt_file}"
+```
+
+Use `--help` to see all available options.
+
 ## Memory Usage
 To use the persistent memory feature put a code_review_memory directory in the project root and follow the template to create consept.md memory files.
 The AI will consult the memory file when he finds the name of the file related to the changed text.
