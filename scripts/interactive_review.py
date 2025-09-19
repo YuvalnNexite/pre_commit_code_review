@@ -452,6 +452,104 @@ def extract_patch(ai_output: str) -> Optional[str]:
     return patch
 
 
+
+def prepare_patch_for_application(
+    patch: str, finding: Finding, patch_source: str
+) -> Optional[str]:
+    """Normalize a diff snippet before applying it with git."""
+
+    normalized = patch.replace("\r\n", "\n").strip("\n")
+
+    if patch_source == "suggestion" or not patch_source:
+        lines = normalized.splitlines()
+
+        diff_header_present = any(
+            re.match(r"^(?:diff --git|--- |\+\+\+ )", line) for line in lines
+        )
+
+        indent_levels: List[int] = []
+        diff_prefixes = (
+            "diff --git",
+            "index ",
+            "--- ",
+            "+++ ",
+            "@@",
+            "\\ No newline",
+        )
+
+        for line in lines:
+            if not line.strip():
+                continue
+            stripped = line.lstrip()
+            first = stripped[:1]
+            if stripped.startswith(diff_prefixes) or first in {"+", "-", "@"}:
+                indent_levels.append(len(line) - len(stripped))
+
+        if indent_levels:
+            remove = min(indent_levels)
+            if remove > 0:
+                stripped_lines = []
+                for line in lines:
+                    if line.startswith(" " * remove):
+                        stripped_lines.append(line[remove:])
+                    else:
+                        stripped_lines.append(line)
+                lines = stripped_lines
+
+        if not diff_header_present:
+            file_path = finding.file.strip()
+            if not file_path:
+                print(
+                    "Cannot apply review suggestion automatically: missing file path."
+                )
+                return None
+            header = [
+                f"diff --git a/{file_path} b/{file_path}",
+                f"--- a/{file_path}",
+                f"+++ b/{file_path}",
+            ]
+            lines = header + lines
+
+        start_line_value, _ = parse_line_span(finding.lines)
+        fallback_line = start_line_value or 1
+        updated_lines: List[str] = []
+        for line in lines:
+            if line.startswith("@@") and not re.match(r"^@@\s*-\d", line):
+                updated_lines.append(f"@@ -{fallback_line} +{fallback_line} @@")
+                fallback_line = max(fallback_line + 1, 1)
+            else:
+                updated_lines.append(line)
+        lines = updated_lines
+
+        valid_prefixes = (
+            "diff --git",
+            "index ",
+            "--- ",
+            "+++ ",
+            "@@",
+            "+",
+            "-",
+            " ",
+            "\\ No newline",
+        )
+        adjusted_lines: List[str] = []
+        for line in lines:
+            if not line:
+                adjusted_lines.append(line)
+                continue
+            if line.startswith(valid_prefixes):
+                adjusted_lines.append(line)
+            else:
+                adjusted_lines.append(f" {line}")
+        normalized = "\n".join(adjusted_lines)
+    else:
+        normalized = normalized
+
+    if not normalized.endswith("\n"):
+        normalized += "\n"
+    return normalized
+
+
 def powershell_quote(text: str) -> str:
     """Quote a string for use in PowerShell single-quoted literals."""
 
@@ -763,28 +861,37 @@ def interactive_loop(repo_root: Path, findings: List[Finding], state: Dict[str, 
                 if suggestion_patch:
                     patch = suggestion_patch
                     patch_source = "suggestion"
-                    entry["last_patch"] = patch
-                    entry["last_patch_source"] = patch_source
                 else:
                     print(
                         "No stored patch or review suggestion diff is available."
                     )
                     continue
 
+            prepared_patch = prepare_patch_for_application(patch, finding, patch_source)
+            if not prepared_patch:
+                continue
+
+            patch_source = patch_source or "suggestion"
+            entry["last_patch"] = prepared_patch
+            entry["last_patch_source"] = patch_source
             source_label = (
                 "review suggestion" if patch_source == "suggestion" else "stored diff"
             )
             print(f"Patch preview ({source_label}):\n")
-            print(patch)
+            print(prepared_patch)
             confirm = input("Apply this patch? [y/N]: ").strip().lower()
             if confirm != "y":
                 print("Patch application cancelled.")
+                findings_state[finding.identifier] = entry
+                state["current_index"] = index
+                save_state(repo_root / "auto_code_review_state.json", state)
                 continue
-            if apply_patch(repo_root, patch):
+            if apply_patch(repo_root, prepared_patch):
                 entry["status"] = "fixed"
-                entry["last_patch_source"] = patch_source
                 findings_state[finding.identifier] = entry
                 index += 1
+            else:
+                findings_state[finding.identifier] = entry
             state["current_index"] = index
             save_state(repo_root / "auto_code_review_state.json", state)
             continue
