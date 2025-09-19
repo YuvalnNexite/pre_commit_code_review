@@ -5,6 +5,28 @@ LOG_DIR="${HOME}/.git-hooks-code-review"
 LOG_FILE="${LOG_DIR}/code_review_progress.log"
 AI_STDERR_LOG="${LOG_DIR}/ai_stdder.log"
 
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+
+truncate_log_if_needed() {
+  local file="$1"
+  local max_size=102400
+
+  if [ -f "$file" ]; then
+    local size
+    if ! size="$(wc -c < "$file" 2>/dev/null)"; then
+      size=0
+    fi
+    size="${size//[!0-9]/}"
+    if [ -z "$size" ]; then
+      size=0
+    fi
+
+    if [ "$size" -gt "$max_size" ]; then
+      : > "$file"
+    fi
+  fi
+}
+
 log_stage() {
   local stage="$1"
   local timestamp
@@ -33,6 +55,8 @@ log_ai_stderr() {
 
 need() { command -v "$1" >/dev/null 2>&1; }
 repo_path="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+truncate_log_if_needed "$LOG_FILE"
+truncate_log_if_needed "$AI_STDERR_LOG"
 log_stage "Pre-commit hook triggered for repository: ${repo_path}"
 diff_text="$(git diff -U100000 HEAD --no-color || true)"
 log_stage "Captured diff for review (length: ${#diff_text} characters)"
