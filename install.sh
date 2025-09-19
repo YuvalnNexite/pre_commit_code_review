@@ -29,7 +29,25 @@ git config --global core.hooksPath "$GLOBAL_HOOKS_DIR"
 # Create global code_review_memory directory
 echo "Setting up global code review memory files..."
 mkdir -p "$GLOBAL_HOOKS_DIR/code_review_memory"
-curl -fsSL "${RAW_BASE}/code_review_memory/memory_template.txt" -o "$GLOBAL_HOOKS_DIR/code_review_memory/memory_template.txt" 2>/dev/null || true
+curl -fsSL "${RAW_BASE}/code_review_memory/memory_template.txt" \
+  -o "$GLOBAL_HOOKS_DIR/code_review_memory/memory_template.txt" 2>/dev/null || true
+
+# Install helper scripts
+SCRIPTS_DIR="$GLOBAL_HOOKS_DIR/scripts"
+echo "Installing helper scripts into $SCRIPTS_DIR..."
+mkdir -p "$SCRIPTS_DIR"
+curl -fsSL "${RAW_BASE}/scripts/interactive_review.py" -o "$SCRIPTS_DIR/interactive_review.py"
+chmod +x "$SCRIPTS_DIR/interactive_review.py"
+
+# Check for a Python interpreter
+if command -v python3 >/dev/null 2>&1; then
+  echo "Detected Python interpreter: $(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+  echo "Detected Python interpreter: $(command -v python)"
+else
+  echo "⚠️  Python 3 is required for the interactive review helper. Please install Python and rerun it via:"
+  echo "   python ~/.git-hooks-code-review/scripts/interactive_review.py"
+fi
 
 echo "✅ Global installation complete!"
 echo ""

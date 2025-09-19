@@ -47,6 +47,39 @@ for macOS/Linux:
 curl https://cursor.com/install -fsS | bash
 ```
 
+## Interactive review helper
+
+After the pre-commit hook finishes generating `auto_code_review.md` you can walk
+through the “BAD” findings with the interactive helper:
+
+```bash
+python scripts/interactive_review.py
+```
+
+If you installed the hook globally via `install.sh`, the helper is copied to
+`$HOME/.git-hooks-code-review/scripts/interactive_review.py`, so you can run it
+from any repository after changing into that repository's directory:
+
+```bash
+python ~/.git-hooks-code-review/scripts/interactive_review.py
+```
+
+The helper requires Python 3. If the installer cannot find Python on your
+system it will remind you to install it before running the script.
+
+The tool keeps track of your progress in `auto_code_review_state.json` so you
+can resume later. While reviewing a finding press:
+
+* `n` – mark the finding as acknowledged and jump to the next one.
+* `o` – open `$EDITOR` at the cited file and line numbers.
+* `f` – ask `gemini` (falls back to `cursor-agent`) to draft a patch.
+* `a` – preview the stored patch and apply it with `git apply`.
+* `p` – revisit the previous finding, `q` – exit the helper.
+
+The fix command automatically detects the same CLI tools as the pre-commit
+hook, so it gracefully skips AI-powered fixes when neither executable is
+available.
+
 ## Memory Usage
 To use the persistent memory feature put a code_review_memory directory in the project root and follow the template to create consept.md memory files.
 The AI will consult the memory file when he finds the name of the file related to the changed text.
