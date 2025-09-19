@@ -217,16 +217,49 @@ PROMPT
     "${repo_path}/scripts/post_review_formatting" \
     "${HOME}/.git-hooks-code-review/scripts/code_review_formatting.py" \
     "${HOME}/.git-hooks-code-review/scripts/post_review_formatting"; do
-    if [ -z "$formatter" ] && [ -x "$candidate" ]; then
-      formatter="$candidate"
+    if [ -n "$formatter" ]; then
+      continue
     fi
+    case "$candidate" in
+      *.py)
+        if [ -f "$candidate" ]; then
+          formatter="$candidate"
+        fi
+        ;;
+      *)
+        if [ -x "$candidate" ]; then
+          formatter="$candidate"
+        fi
+        ;;
+    esac
   done
   if [ -n "$formatter" ]; then
     log_stage "Async review: running code review formatter (${formatter})"
-    if "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
-      log_stage "Async review: formatter completed successfully"
+    if [ "$(basename "$formatter")" = "code_review_formatting.py" ]; then
+      local local_python_cmd=()
+      for python_candidate in "python3" "python" "py -3" "py"; do
+        IFS=' ' read -r -a candidate_parts <<< "$python_candidate"
+        if need "${candidate_parts[0]}"; then
+          local_python_cmd=("${candidate_parts[@]}")
+          break
+        fi
+      done
+      if [ "${#local_python_cmd[@]}" -eq 0 ]; then
+        log_stage "Async review: no Python interpreter found for formatter"
+      else
+        log_stage "Async review: using Python interpreter (${local_python_cmd[*]})"
+        if "${local_python_cmd[@]}" "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
+          log_stage "Async review: formatter completed successfully"
+        else
+          log_stage "Async review: formatter encountered an error"
+        fi
+      fi
     else
-      log_stage "Async review: formatter encountered an error"
+      if "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
+        log_stage "Async review: formatter completed successfully"
+      else
+        log_stage "Async review: formatter encountered an error"
+      fi
     fi
   else
     log_stage "Async review: code review formatter not found"
