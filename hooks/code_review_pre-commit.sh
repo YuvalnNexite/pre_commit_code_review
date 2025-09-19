@@ -228,16 +228,27 @@ PROMPT
   fi
 
   if [ -n "$postprocess_helper" ]; then
-    python_cmd=""
-    if need python3; then
-      python_cmd="python3"
-    elif need python; then
-      python_cmd="python"
+    python_cmd=()
+
+    if need python3 && python3 -c 'import sys' >/dev/null 2>&1; then
+      python_cmd=(python3)
     fi
 
-    if [ -n "$python_cmd" ]; then
+    if [ ${#python_cmd[@]} -eq 0 ] && need python && python -c 'import sys' >/dev/null 2>&1; then
+      python_cmd=(python)
+    fi
+
+    if [ ${#python_cmd[@]} -eq 0 ] && need py; then
+      if py -3 -c 'import sys' >/dev/null 2>&1; then
+        python_cmd=(py -3)
+      elif py -c 'import sys' >/dev/null 2>&1; then
+        python_cmd=(py)
+      fi
+    fi
+
+    if [ ${#python_cmd[@]} -gt 0 ]; then
       log_stage "Async review: running suggestion post-processor"
-      if "$python_cmd" "$postprocess_helper" --review "$out" --repo "$repo_path" >>"$LOG_FILE" 2>&1; then
+      if "${python_cmd[@]}" "$postprocess_helper" --review "$out" --repo "$repo_path" >>"$LOG_FILE" 2>&1; then
         log_stage "Async review: suggestion post-processing completed"
       else
         log_stage "Async review: suggestion post-processing failed (see log)"
