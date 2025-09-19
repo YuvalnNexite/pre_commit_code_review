@@ -452,6 +452,24 @@ def extract_patch(ai_output: str) -> Optional[str]:
     return patch
 
 
+
+def prepare_patch_for_application(patch: str) -> Optional[str]:
+    """Validate and normalize a diff before piping it to git apply."""
+
+    normalized = patch.replace("\r\n", "\n")
+    normalized = normalized.strip("\n")
+    if not normalized.strip():
+        return None
+    if not normalized.endswith("\n"):
+        normalized += "\n"
+    if not re.search(r"^--- ", normalized, re.MULTILINE):
+        return None
+    if not re.search(r"^\+\+\+ ", normalized, re.MULTILINE):
+        return None
+    if not re.search(r"^@@ ", normalized, re.MULTILINE):
+        return None
+    return normalized
+
 def powershell_quote(text: str) -> str:
     """Quote a string for use in PowerShell single-quoted literals."""
 
@@ -600,10 +618,15 @@ def show_text_in_new_terminal(text: str) -> bool:
 def apply_patch(repo_root: Path, patch: str) -> bool:
     """Apply a git patch after confirmation."""
 
+    prepared = prepare_patch_for_application(patch)
+    if not prepared:
+        print("The provided patch is not a valid unified diff.")
+        return False
+
     try:
         process = subprocess.run(
             ["git", "apply", "-"],
-            input=patch,
+            input=prepared,
             text=True,
             capture_output=True,
             cwd=repo_root,
@@ -758,22 +781,96 @@ def interactive_loop(repo_root: Path, findings: List[Finding], state: Dict[str, 
         if command in {"a", "apply"}:
             patch = entry.get("last_patch") or ""
             patch_source = entry.get("last_patch_source") or ""
-            if not patch:
-                suggestion_patch = extract_patch(finding.suggestion)
-                if suggestion_patch:
-                    patch = suggestion_patch
-                    patch_source = "suggestion"
-                    entry["last_patch"] = patch
-                    entry["last_patch_source"] = patch_source
-                else:
-                    print(
-                        "No stored patch or review suggestion diff is available."
-                    )
-                    continue
+            suggestion_issue = ""
+            prepared_patch = prepare_patch_for_application(patch) if patch else None
+            if prepared_patch:
+                patch = prepared_patch
+            elif patch:
+                print(
+                    "Stored patch could not be prepared for application and will be discarded."
+                )
+                patch = ""
+                patch_source = ""
+                entry["last_patch"] = ""
+                entry["last_patch_source"] = ""
+                findings_state[finding.identifier] = entry
+                save_state(repo_root / "auto_code_review_state.json", state)
 
-            source_label = (
-                "review suggestion" if patch_source == "suggestion" else "stored diff"
-            )
+            if not patch:
+                if finding.suggestion:
+                    suggestion_patch = extract_patch(finding.suggestion)
+                    if suggestion_patch:
+                        prepared_suggestion = prepare_patch_for_application(
+                            suggestion_patch
+                        )
+                        if prepared_suggestion:
+                            patch = prepared_suggestion
+                            patch_source = "suggestion"
+                            entry["last_patch"] = patch
+                            entry["last_patch_source"] = patch_source
+                            findings_state[finding.identifier] = entry
+                            save_state(repo_root / "auto_code_review_state.json", state)
+                        else:
+                            suggestion_issue = (
+                                "The review suggestion includes a diff but it could not be prepared "
+                                "for application."
+                            )
+                    else:
+                        suggestion_issue = (
+                            "The review suggestion did not include a diff to apply automatically."
+                        )
+                else:
+                    suggestion_issue = "The review suggestion did not contain a diff."
+
+            if not patch:
+                if suggestion_issue:
+                    print(suggestion_issue)
+                response = input(
+                    "No usable diff is available. Generate an AI fix now? [y/N]: "
+                ).strip().lower()
+                if response not in {"y", "yes"}:
+                    print("No patch available to apply.")
+                    continue
+                ai_output = run_ai_fix(repo_root, finding)
+                if not ai_output:
+                    print("AI fix failed to produce output.")
+                    continue
+                entry["last_ai_output"] = ai_output
+                ai_patch = extract_patch(ai_output)
+                if not ai_patch:
+                    print("AI fix did not return a diff block.")
+                    entry["last_patch"] = ""
+                    entry["last_patch_source"] = ""
+                    findings_state[finding.identifier] = entry
+                    save_state(repo_root / "auto_code_review_state.json", state)
+                    continue
+                prepared_ai_patch = prepare_patch_for_application(ai_patch)
+                if not prepared_ai_patch:
+                    print(
+                        "AI fix returned a diff that could not be prepared for application."
+                    )
+                    entry["last_patch"] = ""
+                    entry["last_patch_source"] = ""
+                    findings_state[finding.identifier] = entry
+                    save_state(repo_root / "auto_code_review_state.json", state)
+                    continue
+                patch = prepared_ai_patch
+                patch_source = "ai"
+                entry["last_patch"] = patch
+                entry["last_patch_source"] = patch_source
+                findings_state[finding.identifier] = entry
+                save_state(repo_root / "auto_code_review_state.json", state)
+                print("Stored AI-generated diff for review.")
+
+            if not patch:
+                print("No patch available to apply.")
+                continue
+
+            label_map = {
+                "suggestion": "review suggestion",
+                "ai": "AI-generated diff",
+            }
+            source_label = label_map.get(patch_source, "stored diff")
             print(f"Patch preview ({source_label}):\n")
             print(patch)
             confirm = input("Apply this patch? [y/N]: ").strip().lower()
