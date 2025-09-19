@@ -7,10 +7,36 @@ The script focuses on cleaning the automatically generated review so that it is
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import sys
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
+
+LOG_DIR = Path.home() / ".git-hooks-code-review"
+LOG_FILE = LOG_DIR / "code_review_progress.log"
+LOGGER = logging.getLogger("code_review_formatting")
+
+
+def configure_logging() -> None:
+    if LOGGER.handlers:
+        return
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    except OSError:
+        return
+    formatter = logging.Formatter(
+        "%(asctime)s - code_review_formatting - %(levelname)s - %(message)s",
+        "%Y-%m-%dT%H:%M:%S%z",
+    )
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.propagate = False
+
+
+configure_logging()
 
 FORMATTING_RULES: Sequence[str] = (
     "Strip AI-internal cues such as \"(if 'BAD')\" or \"(if 'GOOD')\" from labels.",
@@ -20,7 +46,7 @@ FORMATTING_RULES: Sequence[str] = (
     "Synthesise `@@` hunk headers from the reported line range when they are missing so the diff is structured.",
 )
 
-RULES_COMMENT_TEMPLATE = """<!-- post_review_formatting formatting rules:\n{body}-->\n"""
+RULES_COMMENT_TEMPLATE = """<!-- code_review_formatting formatting rules:\n{body}-->\n"""
 
 RULES_COMMENT_BODY = "\n".join(f"- {rule}" for rule in FORMATTING_RULES)
 
@@ -45,6 +71,7 @@ def read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
+        LOGGER.warning("Review file not found at %s", path)
         raise FormattingError(f"File not found: {path}") from exc
 
 
@@ -76,11 +103,11 @@ def remove_ai_instructions(lines: Sequence[str]) -> List[str]:
 
 
 def ensure_rules_comment(text: str) -> str:
-    marker = "<!-- post_review_formatting formatting rules:"
+    marker = "<!-- code_review_formatting formatting rules:"
     if marker in text:
         # Replace existing block
         return re.sub(
-            r"<!-- post_review_formatting formatting rules:.*?-->\n?",
+            r"<!-- code_review_formatting formatting rules:.*?-->\n?",
             RULES_COMMENT,
             text,
             flags=re.DOTALL,
@@ -217,12 +244,28 @@ def format_review(review_path: Path) -> bool:
     try:
         original_text = read_text(review_path)
     except FormattingError:
+        LOGGER.info(
+            "Skipping formatting because the review file could not be read at %s",
+            review_path,
+        )
         return False
 
-    formatted_text = apply_transformations(original_text)
+    try:
+        formatted_text = apply_transformations(original_text)
+    except Exception:
+        LOGGER.exception("Failed while applying transformations to %s", review_path)
+        raise
+
     if formatted_text != original_text:
-        review_path.write_text(formatted_text, encoding="utf-8")
+        try:
+            review_path.write_text(formatted_text, encoding="utf-8")
+        except OSError:
+            LOGGER.exception("Failed to write formatted review to %s", review_path)
+            raise
+        LOGGER.info("Applied formatting updates to %s", review_path)
         return True
+
+    LOGGER.info("No formatting changes required for %s", review_path)
     return False
 
 
@@ -245,13 +288,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not review_path.is_absolute():
         review_path = Path.cwd() / review_path
 
+    LOGGER.info("Formatter invoked for %s", review_path)
+
     if not review_path.exists():
+        LOGGER.info("Review file %s does not exist; skipping", review_path)
         # Silently succeed if the review file does not exist (e.g., when no diff).
         return 0
 
-    changed = format_review(review_path)
+    try:
+        changed = format_review(review_path)
+    except Exception:
+        LOGGER.exception("Formatter failed while processing %s", review_path)
+        return 1
+
     if changed:
-        print(f"post_review_formatting: formatted {review_path}")
+        print(f"code_review_formatting: formatted {review_path}")
     return 0
 
 
