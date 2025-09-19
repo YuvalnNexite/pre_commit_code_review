@@ -236,23 +236,31 @@ PROMPT
   if [ -n "$formatter" ]; then
     log_stage "Async review: running code review formatter (${formatter})"
     if [ "$(basename "$formatter")" = "code_review_formatting.py" ]; then
-      local local_python_cmd=()
+      local formatter_attempted=0
+      local formatter_succeeded=0
+      local python_success_cmd=()
       for python_candidate in "python3" "python" "py -3" "py"; do
         IFS=' ' read -r -a candidate_parts <<< "$python_candidate"
-        if need "${candidate_parts[0]}"; then
-          local_python_cmd=("${candidate_parts[@]}")
+        if ! need "${candidate_parts[0]}"; then
+          continue
+        fi
+        formatter_attempted=1
+        log_stage "Async review: trying Python interpreter (${candidate_parts[*]})"
+        if "${candidate_parts[@]}" "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
+          formatter_succeeded=1
+          python_success_cmd=("${candidate_parts[@]}")
           break
+        else
+          local exit_code=$?
+          log_stage "Async review: interpreter (${candidate_parts[*]}) failed with exit code ${exit_code}"
         fi
       done
-      if [ "${#local_python_cmd[@]}" -eq 0 ]; then
+      if [ "$formatter_succeeded" -eq 1 ]; then
+        log_stage "Async review: formatter completed successfully using (${python_success_cmd[*]})"
+      elif [ "$formatter_attempted" -eq 0 ]; then
         log_stage "Async review: no Python interpreter found for formatter"
       else
-        log_stage "Async review: using Python interpreter (${local_python_cmd[*]})"
-        if "${local_python_cmd[@]}" "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
-          log_stage "Async review: formatter completed successfully"
-        else
-          log_stage "Async review: formatter encountered an error"
-        fi
+        log_stage "Async review: formatter encountered an error"
       fi
     else
       if "$formatter" "$out" >/dev/null 2>>"$tmp_stderr"; then
