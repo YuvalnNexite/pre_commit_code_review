@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
 
+const logger = require('./logger');
+
 function normalizeNewlines(value) {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : '';
 }
@@ -56,7 +58,12 @@ function extractSuggestionParts(text) {
 }
 
 function parseBadAssessments(markdown) {
+  logger.logDebug('parseBadAssessments invoked', {
+    hasMarkdown: typeof markdown === 'string',
+    length: typeof markdown === 'string' ? markdown.length : 0
+  });
   if (typeof markdown !== 'string' || markdown.trim() === '') {
+    logger.logInfo('parseBadAssessments received empty markdown');
     return [];
   }
 
@@ -150,7 +157,7 @@ function parseBadAssessments(markdown) {
     const suggestionRaw = joinFieldLines(assessment.fields.suggestion);
     const suggestionParts = extractSuggestionParts(suggestionRaw);
 
-    badAssessments.push({
+    const parsedAssessment = {
       id: badAssessments.length + 1,
       position: assessment.position,
       verdict: 'BAD',
@@ -164,8 +171,23 @@ function parseBadAssessments(markdown) {
         text: suggestionParts.text,
         diff: suggestionParts.diff
       }
+    };
+
+    badAssessments.push(parsedAssessment);
+
+    logger.logDebug('Parsed BAD assessment', {
+      id: parsedAssessment.id,
+      position: parsedAssessment.position,
+      title: parsedAssessment.title,
+      file: parsedAssessment.file,
+      hasDiff: Boolean(parsedAssessment.suggestion?.diff)
     });
   }
+
+  logger.logInfo('parseBadAssessments completed', {
+    totalAssessments: allAssessments.length,
+    badAssessments: badAssessments.length
+  });
 
   return badAssessments;
 }
@@ -179,6 +201,11 @@ function ensureTrailingNewline(text) {
 
 function runGitCommand(args, cwd, diffText) {
   return new Promise((resolve, reject) => {
+    logger.logInfo('Running git command', {
+      args,
+      cwd,
+      diffBytes: typeof diffText === 'string' ? Buffer.byteLength(diffText) : 0
+    });
     const child = spawn('git', args, { cwd });
     let stdout = '';
     let stderr = '';
@@ -192,17 +219,36 @@ function runGitCommand(args, cwd, diffText) {
     });
 
     child.on('error', (error) => {
+      logger.logError('Failed to start git command', {
+        args,
+        cwd,
+        error
+      });
       reject(error);
     });
 
     child.on('close', (code) => {
       if (code === 0) {
+        logger.logInfo('git command completed successfully', {
+          args,
+          cwd,
+          exitCode: code,
+          stdout,
+          stderr
+        });
         resolve({ stdout, stderr });
       } else {
         const error = new Error(`git ${args.join(' ')} failed with exit code ${code}`);
         error.exitCode = code;
         error.stdout = stdout;
         error.stderr = stderr;
+        logger.logError('git command failed', {
+          args,
+          cwd,
+          exitCode: code,
+          stdout,
+          stderr
+        });
         reject(error);
       }
     });
@@ -216,17 +262,39 @@ function runGitCommand(args, cwd, diffText) {
 
 async function applySuggestionDiff(diffText, repoDir) {
   if (typeof diffText !== 'string' || diffText.trim() === '') {
+    logger.logWarn('applySuggestionDiff received empty diff', {
+      repoDir
+    });
     throw new Error('Suggestion diff is empty.');
   }
   if (typeof repoDir !== 'string' || repoDir.trim() === '') {
+    logger.logWarn('applySuggestionDiff missing repository directory');
     throw new Error('Repository directory is required.');
   }
 
   const normalizedDiff = ensureTrailingNewline(normalizeNewlines(diffText));
+  logger.logInfo('applySuggestionDiff begin', {
+    repoDir,
+    diffLength: normalizedDiff.length
+  });
 
-  await runGitCommand(['apply', '--check', '--whitespace=nowarn'], repoDir, normalizedDiff);
-  const result = await runGitCommand(['apply', '--whitespace=nowarn'], repoDir, normalizedDiff);
-  return result;
+  try {
+    await runGitCommand(['apply', '--check', '--whitespace=nowarn'], repoDir, normalizedDiff);
+    const result = await runGitCommand(['apply', '--whitespace=nowarn'], repoDir, normalizedDiff);
+    logger.logInfo('applySuggestionDiff succeeded', {
+      repoDir,
+      diffLength: normalizedDiff.length,
+      stdout: result.stdout,
+      stderr: result.stderr
+    });
+    return result;
+  } catch (error) {
+    logger.logError('applySuggestionDiff failed', {
+      repoDir,
+      error
+    });
+    throw error;
+  }
 }
 
 module.exports = {
