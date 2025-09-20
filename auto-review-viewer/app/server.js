@@ -20,14 +20,24 @@ const md = new MarkdownIt({
 });
 
 let cachedTemplate = null;
+let cachedTemplateMtimeMs = null;
 
 async function loadTemplate() {
-  if (cachedTemplate) {
+  try {
+    const stats = await fs.promises.stat(templatePath);
+    if (!cachedTemplate || cachedTemplateMtimeMs !== stats.mtimeMs) {
+      const content = await fs.promises.readFile(templatePath, 'utf8');
+      cachedTemplate = content;
+      cachedTemplateMtimeMs = stats.mtimeMs;
+    }
     return cachedTemplate;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      cachedTemplate = null;
+      cachedTemplateMtimeMs = null;
+    }
+    throw error;
   }
-
-  cachedTemplate = await fs.promises.readFile(templatePath, 'utf8');
-  return cachedTemplate;
 }
 
 async function readMarkdownFile() {
@@ -64,14 +74,59 @@ app.get('/', async (req, res) => {
   }
 });
 
+async function statIfExists(filePath) {
+  try {
+    return await fs.promises.stat(filePath);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function formatStat(stat) {
+  if (!stat) {
+    return null;
+  }
+
+  return {
+    mtimeMs: stat.mtimeMs,
+    iso: stat.mtime.toISOString()
+  };
+}
+
 app.get('/mtime', async (req, res) => {
   try {
-    const stats = await fs.promises.stat(targetPath);
+    const [markdownStat, templateStat] = await Promise.all([
+      statIfExists(targetPath),
+      statIfExists(templatePath)
+    ]);
+
+    if (!markdownStat) {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.status(404).json({
+        error: `Could not find markdown file at ${targetPath}`,
+        file: FILENAME,
+        template: formatStat(templateStat)
+      });
+      return;
+    }
+
+    const markdownInfo = formatStat(markdownStat);
+    const templateInfo = formatStat(templateStat);
+    const latestMtimeMs = Math.max(
+      markdownInfo?.mtimeMs ?? 0,
+      templateInfo?.mtimeMs ?? 0
+    );
+
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.json({
       file: FILENAME,
-      mtimeMs: stats.mtimeMs,
-      iso: stats.mtime.toISOString()
+      markdown: markdownInfo,
+      template: templateInfo,
+      mtimeMs: latestMtimeMs || null,
+      iso: latestMtimeMs ? new Date(latestMtimeMs).toISOString() : null
     });
   } catch (error) {
     const status = error.code === 'ENOENT' ? 404 : 500;

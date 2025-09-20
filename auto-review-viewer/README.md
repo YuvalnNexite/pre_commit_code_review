@@ -77,7 +77,7 @@ Environment variables:
 ## Endpoints
 
 - `GET /` – render the Markdown file as rich HTML.
-- `GET /mtime` – return the file's last modified timestamp (`{ mtimeMs, iso }`).
+- `GET /mtime` – return the latest modified timestamp plus markdown/template details (`{ mtimeMs, iso, markdown, template }`).
 - `GET /healthz` – simple health check returning `{ status: "ok" }`.
 
 ## Future enhancements

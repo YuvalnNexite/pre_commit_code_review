@@ -429,14 +429,34 @@
             throw new Error(`Request failed with status ${response.status}`);
           }
           const payload = await response.json();
-          if (typeof payload.mtimeMs === 'number') {
-            if (lastSeenMtime && payload.mtimeMs > lastSeenMtime) {
+          const markdownMtime = payload?.markdown?.mtimeMs;
+          const templateMtime = payload?.template?.mtimeMs;
+          const latestMtime = typeof payload.mtimeMs === 'number' ? payload.mtimeMs : null;
+
+          if (typeof latestMtime === 'number') {
+            if (lastSeenMtime && latestMtime > lastSeenMtime) {
               window.location.reload();
               return;
             }
-            lastSeenMtime = payload.mtimeMs;
+
+            lastSeenMtime = latestMtime;
+
             if (statusLine) {
-              statusLine.textContent = `Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`;
+              const details = [];
+
+              if (typeof markdownMtime === 'number') {
+                details.push(`Markdown ${formatTimestamp(markdownMtime)}`);
+              }
+
+              if (typeof templateMtime === 'number') {
+                details.push(`Template ${formatTimestamp(templateMtime)}`);
+              }
+
+              const message = details.length
+                ? `Watching… ${details.join(' · ')}`
+                : `Watching… Last updated ${formatTimestamp(latestMtime)}`;
+
+              statusLine.textContent = message;
               statusLine.classList.remove('text-red-500');
               statusLine.classList.add('text-slate-500', 'dark:text-slate-400');
             }
