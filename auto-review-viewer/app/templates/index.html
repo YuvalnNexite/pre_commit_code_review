@@ -215,13 +215,182 @@
         </div>
       </header>
       <main class="flex-1">
-        <div class="mx-auto w-full max-w-4xl px-4 pb-10 pt-6 sm:px-6">
-          <article
-            class="acr-content prose-sm prose-slate max-w-none dark:prose-invert"
-            style="font-size: var(--acr-font-size); line-height: var(--acr-line-height);"
-          >
-            {{CONTENT}}
-          </article>
+        <div class="mx-auto w-full max-w-6xl px-4 pb-12 pt-6 sm:px-6">
+          <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div
+              class="inline-flex rounded-full border border-slate-200 bg-white p-1 text-sm font-medium shadow-sm dark:border-slate-700 dark:bg-slate-900"
+              role="group"
+              aria-label="Viewer mode"
+            >
+              <button
+                id="mode-report"
+                type="button"
+                data-viewer-mode="report"
+                class="mode-toggle-button inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              >
+                <span>Report</span>
+              </button>
+              <button
+                id="mode-action"
+                type="button"
+                data-viewer-mode="action"
+                class="mode-toggle-button inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+              >
+                <span>Action</span>
+              </button>
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">
+              Use Action mode to apply suggestions. Hotkeys activate while Action mode is open.
+            </div>
+          </div>
+          <section id="report-view">
+            <article
+              class="acr-content prose-sm prose-slate max-w-none dark:prose-invert"
+              style="font-size: var(--acr-font-size); line-height: var(--acr-line-height);"
+            >
+              {{CONTENT}}
+            </article>
+          </section>
+          <section id="action-view" class="space-y-6" hidden>
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100">Action mode</h2>
+                  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Step through each bad assessment and apply its suggested diff.
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    id="action-help-button"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700"
+                  >
+                    <span>Help</span>
+                    <span class="rounded-full bg-slate-200 px-1.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">?</span>
+                  </button>
+                </div>
+              </div>
+              <div id="action-count" class="mt-3 text-xs text-slate-500 dark:text-slate-400"></div>
+            </div>
+            <div id="action-feedback" class="hidden rounded-2xl border px-4 py-3 text-sm"></div>
+            <div
+              id="action-empty"
+              class="rounded-2xl border border-dashed border-slate-300 bg-white/60 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300"
+            >
+              Loading bad assessments…
+            </div>
+            <div id="action-body" class="space-y-5" hidden>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div id="action-progress" class="text-sm font-semibold text-slate-700 dark:text-slate-200"></div>
+                  <div id="action-status-summary" class="text-xs text-slate-500 dark:text-slate-400"></div>
+                </div>
+                <div id="action-status-list" class="mt-3 flex flex-wrap gap-2"></div>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div class="flex flex-col gap-4">
+                  <div>
+                    <h3 id="action-title" class="text-xl font-semibold text-slate-800 dark:text-slate-100"></h3>
+                    <div class="mt-2 flex flex-wrap gap-2 text-xs font-medium">
+                      <span
+                        id="action-file"
+                        class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                      ></span>
+                      <span
+                        id="action-lines"
+                        class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                      ></span>
+                      <span
+                        id="action-function"
+                        class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                      ></span>
+                    </div>
+                  </div>
+                  <div class="space-y-4 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+                    <div>
+                      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Details</h4>
+                      <p id="action-details" class="mt-1 whitespace-pre-wrap"></p>
+                    </div>
+                    <div>
+                      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Suggestion</h4>
+                      <p id="action-suggestion-text" class="mt-1 whitespace-pre-wrap"></p>
+                      <div
+                        id="action-diff"
+                        class="mt-3 hidden overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
+                      ></div>
+                    </div>
+                    <div>
+                      <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Reasoning</h4>
+                      <p id="action-reasoning" class="mt-1 whitespace-pre-wrap"></p>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      id="action-prev"
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700"
+                    >
+                      ◀ Previous (P)
+                    </button>
+                    <button
+                      id="action-next"
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700"
+                    >
+                      Next (N) ▶
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      id="action-apply"
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded-full border border-emerald-500 bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Apply (A)
+                    </button>
+                    <button
+                      id="action-skip"
+                      type="button"
+                      class="inline-flex items-center gap-2 rounded-full border border-amber-400 bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-200"
+                    >
+                      Skip (S)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              id="action-help-panel"
+              class="hidden rounded-2xl border border-slate-200 bg-white p-5 text-sm shadow-xl focus:outline-none dark:border-slate-800 dark:bg-slate-900"
+              tabindex="-1"
+              role="dialog"
+              aria-modal="false"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-base font-semibold text-slate-800 dark:text-slate-100">Keyboard shortcuts</h3>
+                <button
+                  id="action-help-close"
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700"
+                >
+                  Close
+                </button>
+              </div>
+              <ul class="mt-4 space-y-2 text-slate-600 dark:text-slate-300">
+                <li><span class="font-semibold">N</span> – Next assessment</li>
+                <li><span class="font-semibold">P</span> – Previous assessment</li>
+                <li><span class="font-semibold">A</span> – Apply suggestion</li>
+                <li><span class="font-semibold">S</span> – Skip assessment</li>
+                <li><span class="font-semibold">?</span> – Toggle this help</li>
+              </ul>
+              <p class="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                Actions update the status list above so you can see what has been applied or skipped.
+              </p>
+            </div>
+          </section>
         </div>
       </main>
       <footer class="border-t border-slate-200/70 bg-white/70 py-3 text-sm text-slate-500 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/70 dark:text-slate-400">
@@ -244,6 +413,31 @@
       const settingsPanel = document.getElementById('settings-panel');
       const fontSizeSelect = document.getElementById('font-size-select');
       const lineSpacingSelect = document.getElementById('line-spacing-select');
+      const reportView = document.getElementById('report-view');
+      const actionView = document.getElementById('action-view');
+      const actionBody = document.getElementById('action-body');
+      const actionEmpty = document.getElementById('action-empty');
+      const actionFeedback = document.getElementById('action-feedback');
+      const actionProgress = document.getElementById('action-progress');
+      const actionStatusList = document.getElementById('action-status-list');
+      const actionStatusSummary = document.getElementById('action-status-summary');
+      const actionTitle = document.getElementById('action-title');
+      const actionFile = document.getElementById('action-file');
+      const actionLines = document.getElementById('action-lines');
+      const actionFunction = document.getElementById('action-function');
+      const actionDetails = document.getElementById('action-details');
+      const actionSuggestionText = document.getElementById('action-suggestion-text');
+      const actionReasoning = document.getElementById('action-reasoning');
+      const actionDiffContainer = document.getElementById('action-diff');
+      const actionCountLabel = document.getElementById('action-count');
+      const actionPrevButton = document.getElementById('action-prev');
+      const actionNextButton = document.getElementById('action-next');
+      const actionApplyButton = document.getElementById('action-apply');
+      const actionSkipButton = document.getElementById('action-skip');
+      const actionHelpButton = document.getElementById('action-help-button');
+      const actionHelpPanel = document.getElementById('action-help-panel');
+      const actionHelpClose = document.getElementById('action-help-close');
+      const modeToggleButtons = document.querySelectorAll('[data-viewer-mode]');
 
       const FONT_SIZE_OPTIONS = {
         sm: '0.875rem',
@@ -261,6 +455,87 @@
         fontSize: 'sm',
         lineSpacing: 'cozy'
       };
+
+      const MODE_STORAGE_KEY = 'acr-view-mode';
+      const MODE_BUTTON_ACTIVE_CLASSES = ['bg-brand-500', 'text-white', 'shadow'];
+      const MODE_BUTTON_INACTIVE_CLASSES = [
+        'bg-transparent',
+        'text-slate-600',
+        'hover:bg-slate-100',
+        'dark:text-slate-300',
+        'dark:hover:bg-slate-800'
+      ];
+      const STATUS_CLASS_MAP = {
+        pending: ['border-slate-200', 'bg-white', 'text-slate-500', 'dark:border-slate-700', 'dark:bg-slate-900', 'dark:text-slate-300'],
+        applied: ['border-emerald-500', 'bg-emerald-50', 'text-emerald-700', 'dark:border-emerald-400/70', 'dark:bg-emerald-500/10', 'dark:text-emerald-200'],
+        skipped: ['border-amber-500', 'bg-amber-50', 'text-amber-700', 'dark:border-amber-400/70', 'dark:bg-amber-500/10', 'dark:text-amber-200']
+      };
+      const STATUS_SYMBOLS = {
+        pending: '',
+        applied: '✓',
+        skipped: '↷'
+      };
+      const FEEDBACK_CLASS_MAP = {
+        success: ['border-emerald-500', 'bg-emerald-50', 'text-emerald-700', 'dark:border-emerald-400/70', 'dark:bg-emerald-500/10', 'dark:text-emerald-200'],
+        error: ['border-rose-500', 'bg-rose-50', 'text-rose-700', 'dark:border-rose-400/70', 'dark:bg-rose-500/10', 'dark:text-rose-200'],
+        info: ['border-slate-300', 'bg-slate-100', 'text-slate-700', 'dark:border-slate-600', 'dark:bg-slate-800', 'dark:text-slate-200']
+      };
+      const ALL_FEEDBACK_CLASSES = Array.from(new Set(Object.values(FEEDBACK_CLASS_MAP).flat()));
+
+      const actionState = {
+        loading: false,
+        loaded: false,
+        assessments: [],
+        currentIndex: 0,
+        updatedAt: null
+      };
+      let currentViewerMode = 'report';
+      let actionHelpVisible = false;
+      let applyingSuggestion = false;
+
+      function createClientLogPayload(eventType, detail = {}) {
+        return {
+          eventType,
+          detail,
+          timestamp: Date.now(),
+          viewerMode: currentViewerMode,
+          index: actionState.currentIndex,
+          total: actionState.assessments.length
+        };
+      }
+
+      function sendClientLog(payload) {
+        try {
+          const body = JSON.stringify(payload);
+          if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function' && typeof Blob !== 'undefined') {
+            const blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon('/api/logs', blob)) {
+              return;
+            }
+          }
+          fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body
+          }).catch((error) => {
+            console.warn('Failed to submit client log', error);
+          });
+        } catch (error) {
+          console.warn('Failed to prepare client log', error);
+        }
+      }
+
+      function logClientEvent(eventType, detail = {}) {
+        if (!eventType) {
+          return;
+        }
+        try {
+          const payload = createClientLogPayload(eventType, detail);
+          sendClientLog(payload);
+        } catch (error) {
+          console.warn('Failed to log client event', error);
+        }
+      }
 
       function applyReadingPreferences(prefs) {
         const root = document.documentElement;
@@ -367,8 +642,645 @@
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           setSettingsPanelVisibility(false);
+          hideHelpPanel();
         }
       });
+
+      function getStoredMode() {
+        try {
+          const stored = window.localStorage.getItem(MODE_STORAGE_KEY);
+          if (stored === 'action' || stored === 'report') {
+            return stored;
+          }
+        } catch (error) {
+          console.warn('Failed to read viewer mode from storage', error);
+        }
+        return 'report';
+      }
+
+      function persistViewerMode(mode) {
+        try {
+          window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+        } catch (error) {
+          console.warn('Failed to store viewer mode', error);
+        }
+      }
+
+      function setActionFeedback(type, message) {
+        if (!actionFeedback) {
+          return;
+        }
+        ALL_FEEDBACK_CLASSES.forEach((cls) => actionFeedback.classList.remove(cls));
+        if (!message) {
+          actionFeedback.classList.add('hidden');
+          actionFeedback.textContent = '';
+          return;
+        }
+        const classes = FEEDBACK_CLASS_MAP[type] || FEEDBACK_CLASS_MAP.info;
+        classes.forEach((cls) => actionFeedback.classList.add(cls));
+        actionFeedback.textContent = message;
+        actionFeedback.classList.remove('hidden');
+      }
+
+      function updateModeButtons(mode) {
+        modeToggleButtons.forEach((button) => {
+          const buttonMode = button.dataset.viewerMode === 'action' ? 'action' : 'report';
+          const isActive = buttonMode === mode;
+          MODE_BUTTON_ACTIVE_CLASSES.forEach((cls) => button.classList.toggle(cls, isActive));
+          MODE_BUTTON_INACTIVE_CLASSES.forEach((cls) => button.classList.toggle(cls, !isActive));
+          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+      }
+
+      function showReportView() {
+        reportView?.removeAttribute('hidden');
+        actionView?.setAttribute('hidden', '');
+        hideHelpPanel();
+      }
+
+      function showActionView() {
+        reportView?.setAttribute('hidden', '');
+        actionView?.removeAttribute('hidden');
+        ensureActionData();
+      }
+
+      function setViewerMode(mode, options = {}) {
+        const nextMode = mode === 'action' ? 'action' : 'report';
+        currentViewerMode = nextMode;
+        if (!options.skipStorage) {
+          persistViewerMode(nextMode);
+        }
+        if (nextMode === 'action') {
+          showActionView();
+        } else {
+          showReportView();
+        }
+        updateModeButtons(nextMode);
+        logClientEvent('set_viewer_mode', {
+          mode: nextMode,
+          skipStorage: Boolean(options.skipStorage)
+        });
+      }
+
+      function showActionEmpty(message) {
+        if (actionEmpty) {
+          if (typeof message === 'string') {
+            actionEmpty.textContent = message;
+          }
+          actionEmpty.removeAttribute('hidden');
+        }
+        actionBody?.setAttribute('hidden', '');
+      }
+
+      function hideActionEmpty() {
+        actionEmpty?.setAttribute('hidden', '');
+        actionBody?.removeAttribute('hidden');
+      }
+
+      function markAssessmentStatus(index, status) {
+        const target = actionState.assessments[index];
+        if (!target) {
+          logClientEvent('assessment_status_missing', {
+            index,
+            status,
+            total: actionState.assessments.length
+          });
+          return;
+        }
+        target.status = status;
+        target.updatedAt = Date.now();
+        logClientEvent('assessment_status_updated', {
+          id: target.id,
+          index,
+          status
+        });
+      }
+
+      function updateActionSummary() {
+        if (!actionStatusSummary) {
+          return;
+        }
+        const total = actionState.assessments.length;
+        if (!total) {
+          actionStatusSummary.textContent = '';
+          return;
+        }
+        let applied = 0;
+        let skipped = 0;
+        actionState.assessments.forEach((assessment) => {
+          if (assessment.status === 'applied') {
+            applied += 1;
+          } else if (assessment.status === 'skipped') {
+            skipped += 1;
+          }
+        });
+        const pending = total - applied - skipped;
+        actionStatusSummary.textContent = `Applied ${applied} · Skipped ${skipped} · Pending ${pending}`;
+      }
+
+      function renderStatusChips() {
+        if (!actionStatusList) {
+          return;
+        }
+        actionStatusList.innerHTML = '';
+        actionState.assessments.forEach((assessment, index) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className =
+            'inline-flex min-w-[2.5rem] items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500';
+          const status = assessment.status || 'pending';
+          const classes = STATUS_CLASS_MAP[status] || STATUS_CLASS_MAP.pending;
+          classes.forEach((cls) => button.classList.add(cls));
+          if (index === actionState.currentIndex) {
+            button.classList.add('ring-2', 'ring-brand-500', 'ring-offset-2', 'ring-offset-white', 'dark:ring-offset-slate-900');
+          }
+          const symbol = STATUS_SYMBOLS[status] || '';
+          button.innerHTML = `<span class="font-semibold">${index + 1}</span>${symbol ? `<span class="ml-1 text-[11px]">${symbol}</span>` : ''}`;
+          button.dataset.index = String(index);
+          button.title = assessment.title ? `${assessment.title} (${status})` : `Assessment ${index + 1}`;
+          button.addEventListener('click', () => {
+            setCurrentIndex(index);
+          });
+          actionStatusList.appendChild(button);
+        });
+      }
+
+      function setMetaBadge(element, prefix, value) {
+        if (!element) {
+          return;
+        }
+        if (value) {
+          element.textContent = prefix ? `${prefix}${value}` : value;
+          element.classList.remove('hidden');
+        } else {
+          element.textContent = '';
+          element.classList.add('hidden');
+        }
+      }
+
+      function updateActionCountLabel(total) {
+        if (!actionCountLabel) {
+          return;
+        }
+        if (!total) {
+          actionCountLabel.textContent = '';
+          return;
+        }
+        const parts = [`Loaded ${total} bad assessment${total === 1 ? '' : 's'}.`];
+        if (actionState.updatedAt) {
+          parts.push(`Last updated ${formatTimestamp(actionState.updatedAt)}`);
+        }
+        actionCountLabel.textContent = parts.join(' ');
+      }
+
+      function updateActionView() {
+        if (!actionBody) {
+          return;
+        }
+        const total = actionState.assessments.length;
+        if (!total) {
+          updateActionCountLabel(0);
+          showActionEmpty('No bad assessments were found. Switch back to Report mode to read the full review.');
+          setActionFeedback('', '');
+          return;
+        }
+        hideActionEmpty();
+        updateActionCountLabel(total);
+        if (actionState.currentIndex < 0 || actionState.currentIndex >= total) {
+          actionState.currentIndex = 0;
+        }
+        const current = actionState.assessments[actionState.currentIndex];
+        if (actionProgress) {
+          actionProgress.textContent = `Assessment ${actionState.currentIndex + 1} of ${total}`;
+        }
+        renderStatusChips();
+        updateActionSummary();
+        if (actionTitle) {
+          actionTitle.textContent = current.title || `Assessment ${actionState.currentIndex + 1}`;
+        }
+        setMetaBadge(actionFile, '📄 ', current.file || '');
+        setMetaBadge(actionLines, '📌 Lines ', current.lines || '');
+        setMetaBadge(actionFunction, 'ƒ ', current.function || '');
+        if (actionDetails) {
+          actionDetails.textContent = current.details || 'No additional details provided.';
+        }
+        if (actionSuggestionText) {
+          actionSuggestionText.textContent = current.suggestion?.text || 'Suggestion is provided as a diff.';
+        }
+        if (actionReasoning) {
+          actionReasoning.textContent = current.reasoning || 'No reasoning supplied.';
+        }
+        if (actionDiffContainer) {
+          actionDiffContainer.innerHTML = '';
+          actionDiffContainer.classList.add('hidden');
+          if (current.suggestion && current.suggestion.diff) {
+            const pre = document.createElement('pre');
+            const code = document.createElement('code');
+            code.className = 'language-diff';
+            const diffText = current.suggestion.diff.endsWith('\n')
+              ? current.suggestion.diff
+              : `${current.suggestion.diff}\n`;
+            code.textContent = diffText;
+            pre.appendChild(code);
+            actionDiffContainer.appendChild(pre);
+            actionDiffContainer.classList.remove('hidden');
+            try {
+              if (window.hljs?.highlightElement) {
+                window.hljs.highlightElement(code);
+              }
+            } catch (error) {
+              console.warn('Failed to highlight diff', error);
+            }
+            try {
+              enhanceDiffBlocks();
+            } catch (error) {
+              console.warn('Failed to decorate diff block', error);
+            }
+          }
+        }
+        if (actionPrevButton) {
+          actionPrevButton.disabled = applyingSuggestion || actionState.currentIndex === 0;
+        }
+        if (actionNextButton) {
+          actionNextButton.disabled = applyingSuggestion || actionState.currentIndex >= total - 1;
+        }
+        if (actionSkipButton) {
+          actionSkipButton.disabled = applyingSuggestion;
+        }
+        if (actionApplyButton) {
+          if (applyingSuggestion) {
+            actionApplyButton.disabled = true;
+            actionApplyButton.textContent = 'Applying…';
+          } else if (current.status === 'applied') {
+            actionApplyButton.disabled = true;
+            actionApplyButton.textContent = 'Applied ✓';
+          } else {
+            actionApplyButton.disabled = false;
+            actionApplyButton.textContent = 'Apply (A)';
+          }
+        }
+        logClientEvent('view_assessment', {
+          id: current.id,
+          index: actionState.currentIndex,
+          status: current.status || 'pending',
+          file: current.file || '',
+          hasDiff: Boolean(current.suggestion?.diff)
+        });
+      }
+
+      function setCurrentIndex(index) {
+        if (!Number.isInteger(index)) {
+          logClientEvent('set_index_invalid', {
+            requestedIndex: index,
+            total: actionState.assessments.length
+          });
+          return;
+        }
+        if (index < 0 || index >= actionState.assessments.length) {
+          logClientEvent('set_index_out_of_bounds', {
+            requestedIndex: index,
+            total: actionState.assessments.length
+          });
+          return;
+        }
+        const target = actionState.assessments[index];
+        actionState.currentIndex = index;
+        logClientEvent('jump_to_assessment', {
+          id: target?.id,
+          index,
+          status: target?.status || 'pending'
+        });
+        updateActionView();
+      }
+
+      function goNext() {
+        const total = actionState.assessments.length;
+        if (total === 0) {
+          logClientEvent('navigate_next_empty', { total });
+          return false;
+        }
+        if (actionState.currentIndex < total - 1) {
+          actionState.currentIndex += 1;
+          logClientEvent('navigate_next', {
+            index: actionState.currentIndex,
+            total
+          });
+          updateActionView();
+          return true;
+        }
+        logClientEvent('navigate_next_boundary', {
+          index: actionState.currentIndex,
+          total
+        });
+        return false;
+      }
+
+      function goPrevious() {
+        const total = actionState.assessments.length;
+        if (total === 0) {
+          logClientEvent('navigate_previous_empty', { total });
+          return false;
+        }
+        if (actionState.currentIndex > 0) {
+          actionState.currentIndex -= 1;
+          logClientEvent('navigate_previous', {
+            index: actionState.currentIndex,
+            total
+          });
+          updateActionView();
+          return true;
+        }
+        logClientEvent('navigate_previous_boundary', {
+          index: actionState.currentIndex,
+          total
+        });
+        return false;
+      }
+
+      async function loadBadAssessments() {
+        if (actionState.loading) {
+          logClientEvent('load_bad_assessments_skip', {
+            reason: 'in_progress'
+          });
+          return;
+        }
+        actionState.loading = true;
+        logClientEvent('load_bad_assessments_start', {});
+        showActionEmpty('Loading bad assessments…');
+        setActionFeedback('info', 'Loading suggestions…');
+        try {
+          const response = await fetch('/api/assessments/bad', { cache: 'no-store' });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const message = payload && typeof payload.error === 'string'
+              ? payload.error
+              : `Request failed with status ${response.status}`;
+            throw new Error(message);
+          }
+          const assessments = Array.isArray(payload.assessments) ? payload.assessments : [];
+          actionState.assessments = assessments.map((assessment) => ({
+            ...assessment,
+            status: 'pending'
+          }));
+          actionState.loaded = true;
+          actionState.updatedAt = typeof payload.updatedAt === 'number' ? payload.updatedAt : null;
+          logClientEvent('load_bad_assessments_success', {
+            count: actionState.assessments.length,
+            updatedAt: actionState.updatedAt
+          });
+          if (actionState.assessments.length === 0) {
+            setActionFeedback('info', 'No bad assessments were detected in this review.');
+            showActionEmpty('No bad assessments were found. Switch back to Report mode to read the full review.');
+          } else {
+            setActionFeedback('success', `Loaded ${actionState.assessments.length} bad assessment${actionState.assessments.length === 1 ? '' : 's'}.`);
+            actionState.currentIndex = 0;
+            updateActionView();
+          }
+        } catch (error) {
+          console.error('Failed to load assessments', error);
+          logClientEvent('load_bad_assessments_error', {
+            message: error.message || 'Unknown error'
+          });
+          setActionFeedback('error', error.message || 'Failed to load bad assessments.');
+          showActionEmpty('Could not load bad assessments. Try refreshing the page.');
+        } finally {
+          actionState.loading = false;
+          logClientEvent('load_bad_assessments_complete', {
+            count: actionState.assessments.length,
+            loaded: actionState.loaded
+          });
+        }
+      }
+
+      async function ensureActionData() {
+        logClientEvent('ensure_action_data', {
+          loaded: actionState.loaded,
+          count: actionState.assessments.length
+        });
+        if (actionState.loaded) {
+          if (actionState.assessments.length > 0) {
+            updateActionView();
+          } else {
+            showActionEmpty('No bad assessments were found. Switch back to Report mode to read the full review.');
+          }
+          return;
+        }
+        await loadBadAssessments();
+      }
+
+      function handleSkip() {
+        if (applyingSuggestion) {
+          logClientEvent('skip_blocked', { reason: 'applying' });
+          return;
+        }
+        if (!actionState.assessments.length) {
+          logClientEvent('skip_blocked', { reason: 'empty' });
+          return;
+        }
+        const current = actionState.assessments[actionState.currentIndex];
+        if (!current) {
+          logClientEvent('skip_missing_assessment', {
+            index: actionState.currentIndex,
+            total: actionState.assessments.length
+          });
+          return;
+        }
+        logClientEvent('skip_assessment', {
+          id: current.id,
+          index: actionState.currentIndex,
+          file: current.file || ''
+        });
+        markAssessmentStatus(actionState.currentIndex, 'skipped');
+        setActionFeedback('info', `Skipped ${current.title || `assessment ${current.id}`}.`);
+        if (!goNext()) {
+          updateActionView();
+        }
+      }
+
+      async function handleApply() {
+        if (applyingSuggestion) {
+          logClientEvent('apply_blocked', { reason: 'in_progress' });
+          return;
+        }
+        if (!actionState.assessments.length) {
+          logClientEvent('apply_blocked', { reason: 'empty' });
+          return;
+        }
+        const current = actionState.assessments[actionState.currentIndex];
+        if (!current || !current.suggestion || !current.suggestion.diff) {
+          logClientEvent('apply_blocked', {
+            reason: 'missing_diff',
+            id: current?.id,
+            index: actionState.currentIndex
+          });
+          setActionFeedback('error', 'No diff suggestion is available for this assessment.');
+          return;
+        }
+        logClientEvent('apply_attempt', {
+          id: current.id,
+          index: actionState.currentIndex,
+          file: current.file || ''
+        });
+        applyingSuggestion = true;
+        updateActionView();
+        const fileLabel = current.file ? ` for ${current.file}` : '';
+        setActionFeedback('info', `Applying suggestion${fileLabel}…`);
+        try {
+          const response = await fetch(`/api/assessments/${current.id}/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.success !== true) {
+            const message = payload && typeof payload.error === 'string'
+              ? payload.error
+              : `Apply failed with status ${response.status}`;
+            throw new Error(message);
+          }
+          logClientEvent('apply_success', {
+            id: current.id,
+            stdoutLength: typeof payload.stdout === 'string' ? payload.stdout.length : 0,
+            stderrLength: typeof payload.stderr === 'string' ? payload.stderr.length : 0
+          });
+          markAssessmentStatus(actionState.currentIndex, 'applied');
+          setActionFeedback('success', `Applied suggestion${fileLabel}.`);
+          if (!goNext()) {
+            updateActionView();
+          }
+        } catch (error) {
+          console.error('Failed to apply suggestion', error);
+          logClientEvent('apply_failure', {
+            id: current?.id,
+            message: error.message || 'Unknown error'
+          });
+          setActionFeedback('error', error.message || 'Failed to apply suggestion.');
+          updateActionView();
+        } finally {
+          applyingSuggestion = false;
+          updateActionView();
+          const updated = actionState.assessments[actionState.currentIndex];
+          logClientEvent('apply_complete', {
+            id: current?.id,
+            status: updated?.status || current?.status || 'unknown'
+          });
+        }
+      }
+
+      function showHelpPanel() {
+        if (!actionHelpPanel) {
+          return;
+        }
+        actionHelpPanel.classList.remove('hidden');
+        actionHelpPanel.setAttribute('aria-hidden', 'false');
+        actionHelpVisible = true;
+        actionHelpButton?.setAttribute('aria-expanded', 'true');
+        logClientEvent('show_help_panel', {
+          index: actionState.currentIndex,
+          total: actionState.assessments.length
+        });
+        try {
+          actionHelpPanel.focus({ preventScroll: true });
+        } catch (error) {
+          actionHelpPanel.focus();
+        }
+      }
+
+      function hideHelpPanel() {
+        if (!actionHelpPanel) {
+          return;
+        }
+        actionHelpPanel.classList.add('hidden');
+        actionHelpPanel.setAttribute('aria-hidden', 'true');
+        actionHelpVisible = false;
+        actionHelpButton?.setAttribute('aria-expanded', 'false');
+        logClientEvent('hide_help_panel', {
+          index: actionState.currentIndex,
+          total: actionState.assessments.length
+        });
+      }
+
+      function toggleHelpPanel() {
+        if (actionHelpVisible) {
+          hideHelpPanel();
+        } else {
+          showHelpPanel();
+        }
+      }
+
+      function handleActionHotkeys(event) {
+        if (currentViewerMode !== 'action') {
+          return;
+        }
+        if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) {
+          return;
+        }
+        const target = event.target;
+        const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+        if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) {
+          return;
+        }
+        const key = event.key || '';
+        if (key === '?') {
+          event.preventDefault();
+          toggleHelpPanel();
+          return;
+        }
+        if (key === '/' && event.shiftKey) {
+          event.preventDefault();
+          toggleHelpPanel();
+          return;
+        }
+        const lower = key.toLowerCase();
+        if (lower === 'n') {
+          event.preventDefault();
+          goNext();
+        } else if (lower === 'p') {
+          event.preventDefault();
+          goPrevious();
+        } else if (lower === 's') {
+          event.preventDefault();
+          handleSkip();
+        } else if (lower === 'a') {
+          event.preventDefault();
+          handleApply();
+        }
+      }
+
+      modeToggleButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const mode = button.dataset.viewerMode === 'action' ? 'action' : 'report';
+          setViewerMode(mode);
+        });
+      });
+
+      actionPrevButton?.addEventListener('click', () => {
+        goPrevious();
+      });
+
+      actionNextButton?.addEventListener('click', () => {
+        goNext();
+      });
+
+      actionSkipButton?.addEventListener('click', () => {
+        handleSkip();
+      });
+
+      actionApplyButton?.addEventListener('click', () => {
+        handleApply();
+      });
+
+      actionHelpButton?.addEventListener('click', () => {
+        toggleHelpPanel();
+      });
+
+      actionHelpClose?.addEventListener('click', () => {
+        hideHelpPanel();
+      });
+
+      document.addEventListener('keydown', handleActionHotkeys);
+
+      setViewerMode(getStoredMode(), { skipStorage: true });
 
       function applyHighlightTheme(mode) {
         if (!hljsLight || !hljsDark) return;

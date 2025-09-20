@@ -4,7 +4,7 @@
   "description": "Auto Code Review markdown viewer",
   "main": "server.js",
   "scripts": {
-    "test": "node --check server.js",
+    "test": "node --check server.js && node --test",
     "start": "node server.js"
   },
   "keywords": [],
