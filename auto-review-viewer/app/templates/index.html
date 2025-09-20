@@ -44,6 +44,11 @@
       disabled
     />
     <style>
+      :root {
+        --acr-font-size: 0.875rem;
+        --acr-line-height: 1.65;
+      }
+
       body {
         font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
       }
@@ -58,6 +63,13 @@
       }
       .prose code {
         border-radius: 0.375rem;
+      }
+      .acr-content {
+        font-size: var(--acr-font-size);
+        line-height: var(--acr-line-height);
+      }
+      .acr-content :where(p, li, blockquote, dd) {
+        line-height: var(--acr-line-height);
       }
       .prose :where(code):not(:where([class~="not-prose"] *)) {
         background-color: rgba(15, 23, 42, 0.05);
@@ -138,7 +150,55 @@
             Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span> from
             <span class="truncate text-slate-500 dark:text-slate-400">{{FILE_PATH}}</span>
           </div>
-          <div class="flex flex-1 justify-end">
+          <div class="flex flex-1 items-center justify-end gap-3">
+            <div class="relative">
+              <button
+                id="settings-toggle"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded="false"
+                class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-white"
+              >
+                <span aria-hidden="true">⚙️</span>
+                <span>Settings</span>
+              </button>
+              <div
+                id="settings-panel"
+                class="absolute right-0 z-30 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-lg ring-1 ring-black/5 transition dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:ring-white/10"
+                hidden
+              >
+                <div class="flex flex-col gap-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <label for="font-size-select" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Font size</label>
+                      <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Adjust the base font size of the review.</p>
+                    </div>
+                    <select
+                      id="font-size-select"
+                      class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="sm">Small</option>
+                      <option value="md">Medium</option>
+                      <option value="lg">Large</option>
+                    </select>
+                  </div>
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <label for="line-spacing-select" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Line spacing</label>
+                      <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Control the spacing between lines.</p>
+                    </div>
+                    <select
+                      id="line-spacing-select"
+                      class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="compact">Compact</option>
+                      <option value="cozy">Cozy</option>
+                      <option value="relaxed">Relaxed</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button
               id="theme-toggle"
               type="button"
@@ -156,7 +216,10 @@
       </header>
       <main class="flex-1">
         <div class="mx-auto w-full max-w-4xl px-4 pb-10 pt-6 sm:px-6">
-          <article class="prose-sm prose-slate max-w-none dark:prose-invert">
+          <article
+            class="acr-content prose-sm prose-slate max-w-none dark:prose-invert"
+            style="font-size: var(--acr-font-size); line-height: var(--acr-line-height);"
+          >
             {{CONTENT}}
           </article>
         </div>
@@ -177,6 +240,135 @@
       const themeToggleIcon = document.getElementById('theme-toggle-icon');
       const hljsLight = document.getElementById('hljs-light');
       const hljsDark = document.getElementById('hljs-dark');
+      const settingsToggle = document.getElementById('settings-toggle');
+      const settingsPanel = document.getElementById('settings-panel');
+      const fontSizeSelect = document.getElementById('font-size-select');
+      const lineSpacingSelect = document.getElementById('line-spacing-select');
+
+      const FONT_SIZE_OPTIONS = {
+        sm: '0.875rem',
+        md: '1rem',
+        lg: '1.125rem'
+      };
+
+      const LINE_SPACING_OPTIONS = {
+        compact: '1.5',
+        cozy: '1.65',
+        relaxed: '1.8'
+      };
+
+      const DEFAULT_READING_PREFS = {
+        fontSize: 'sm',
+        lineSpacing: 'cozy'
+      };
+
+      function applyReadingPreferences(prefs) {
+        const root = document.documentElement;
+        const fontSize = FONT_SIZE_OPTIONS[prefs.fontSize] || FONT_SIZE_OPTIONS[DEFAULT_READING_PREFS.fontSize];
+        const lineHeight = LINE_SPACING_OPTIONS[prefs.lineSpacing] || LINE_SPACING_OPTIONS[DEFAULT_READING_PREFS.lineSpacing];
+        root.style.setProperty('--acr-font-size', fontSize);
+        root.style.setProperty('--acr-line-height', lineHeight);
+      }
+
+      function loadReadingPreferences() {
+        try {
+          const raw = window.localStorage.getItem('acr-reading-prefs');
+          if (!raw) return { ...DEFAULT_READING_PREFS };
+          const parsed = JSON.parse(raw);
+          if (typeof parsed !== 'object' || parsed === null) {
+            return { ...DEFAULT_READING_PREFS };
+          }
+          return {
+            fontSize: parsed.fontSize && FONT_SIZE_OPTIONS[parsed.fontSize] ? parsed.fontSize : DEFAULT_READING_PREFS.fontSize,
+            lineSpacing:
+              parsed.lineSpacing && LINE_SPACING_OPTIONS[parsed.lineSpacing]
+                ? parsed.lineSpacing
+                : DEFAULT_READING_PREFS.lineSpacing
+          };
+        } catch (error) {
+          console.warn('Failed to load reading preferences', error);
+          return { ...DEFAULT_READING_PREFS };
+        }
+      }
+
+      function saveReadingPreferences(prefs) {
+        try {
+          window.localStorage.setItem('acr-reading-prefs', JSON.stringify(prefs));
+        } catch (error) {
+          console.warn('Failed to save reading preferences', error);
+        }
+      }
+
+      function syncReadingControls(prefs) {
+        if (fontSizeSelect) {
+          fontSizeSelect.value = prefs.fontSize;
+        }
+        if (lineSpacingSelect) {
+          lineSpacingSelect.value = prefs.lineSpacing;
+        }
+      }
+
+      const readingPreferences = loadReadingPreferences();
+      applyReadingPreferences(readingPreferences);
+      syncReadingControls(readingPreferences);
+
+      function updateReadingPreference(key, value) {
+        const updated = { ...readingPreferences, [key]: value };
+        readingPreferences.fontSize = updated.fontSize;
+        readingPreferences.lineSpacing = updated.lineSpacing;
+        applyReadingPreferences(updated);
+        saveReadingPreferences(updated);
+      }
+
+      fontSizeSelect?.addEventListener('change', (event) => {
+        const value = event.target.value;
+        if (FONT_SIZE_OPTIONS[value]) {
+          updateReadingPreference('fontSize', value);
+        }
+      });
+
+      lineSpacingSelect?.addEventListener('change', (event) => {
+        const value = event.target.value;
+        if (LINE_SPACING_OPTIONS[value]) {
+          updateReadingPreference('lineSpacing', value);
+        }
+      });
+
+      function setSettingsPanelVisibility(visible) {
+        if (!settingsPanel || !settingsToggle) return;
+        if (visible) {
+          settingsPanel.hidden = false;
+          settingsToggle.setAttribute('aria-expanded', 'true');
+        } else {
+          settingsPanel.hidden = true;
+          settingsToggle.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      function toggleSettingsPanel() {
+        if (!settingsPanel) return;
+        const isHidden = settingsPanel.hasAttribute('hidden');
+        setSettingsPanelVisibility(isHidden);
+      }
+
+      settingsToggle?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleSettingsPanel();
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!settingsPanel || settingsPanel.hasAttribute('hidden')) return;
+        if (settingsPanel.contains(event.target) || settingsToggle?.contains(event.target)) {
+          return;
+        }
+        setSettingsPanelVisibility(false);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          setSettingsPanelVisibility(false);
+        }
+      });
 
       function applyHighlightTheme(mode) {
         if (!hljsLight || !hljsDark) return;
