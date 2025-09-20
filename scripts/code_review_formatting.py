@@ -38,23 +38,14 @@ def configure_logging() -> None:
 
 configure_logging()
 
-FORMATTING_RULES: Sequence[str] = (
-    "Strip AI-internal cues such as \"(if 'BAD')\" or \"(if 'GOOD')\" from labels.",
-    "Remove prompt artefacts like the repeating-structure markers or the `**critical:**` hint.",
-    "Normalise whitespace (Unix line endings, collapse excessive blank lines, ensure trailing newline).",
-    "Rewrite `diff` code fences into git-apply-friendly patches by adding `---/+++` headers using the reported file path.",
-    "Synthesise `@@` hunk headers from the reported line range when they are missing so the diff is structured.",
-)
-
-RULES_COMMENT_TEMPLATE = """<!-- code_review_formatting formatting rules:\n{body}-->\n"""
-
-RULES_COMMENT_BODY = "\n".join(f"- {rule}" for rule in FORMATTING_RULES)
-
-RULES_COMMENT = RULES_COMMENT_TEMPLATE.format(body=RULES_COMMENT_BODY + "\n")
-
 AI_INSTRUCTION_PATTERN = re.compile(r"\(if ['\"]?(?:BAD|GOOD|NEUTRAL)['\"]?\)", re.IGNORECASE)
 REPEATING_STRUCTURE_PATTERN = re.compile(r"^--\s*(?:start|end) of repeating structure --$", re.IGNORECASE)
 CRITICAL_PATTERN = re.compile(r"^\*\*critical:\*\*.*", re.IGNORECASE)
+
+RULES_COMMENT_PATTERN = re.compile(
+    r"<!-- code_review_formatting formatting rules:.*?-->\n?",
+    re.DOTALL,
+)
 
 FILE_LINE_PATTERN = re.compile(r"^\*\*file:\*\*\s*(.+)$", re.IGNORECASE)
 LINES_PATTERN = re.compile(
@@ -102,17 +93,8 @@ def remove_ai_instructions(lines: Sequence[str]) -> List[str]:
     return cleaned
 
 
-def ensure_rules_comment(text: str) -> str:
-    marker = "<!-- code_review_formatting formatting rules:"
-    if marker in text:
-        # Replace existing block
-        return re.sub(
-            r"<!-- code_review_formatting formatting rules:.*?-->\n?",
-            RULES_COMMENT,
-            text,
-            flags=re.DOTALL,
-        )
-    return RULES_COMMENT + text.lstrip()
+def strip_rules_comment(text: str) -> str:
+    return RULES_COMMENT_PATTERN.sub("", text)
 
 
 def parse_line_range(metadata: Optional[str]) -> Optional[Tuple[int, int]]:
@@ -235,8 +217,8 @@ def apply_transformations(text: str) -> str:
     lines = remove_ai_instructions(lines)
     lines = format_code_blocks(lines)
     text = "\n".join(lines)
+    text = strip_rules_comment(text)
     text = normalise_whitespace(text)
-    text = ensure_rules_comment(text)
     return text
 
 
