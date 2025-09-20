@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto Code Review Viewer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1>Auto Code Review Viewer</h1>
+        <p class="app__tagline">
+          Inspect <code>auto_code_review.md</code> files from this repository with live updates.
+        </p>
+      </header>
+      <section class="controls">
+        <form id="directory-form" class="controls__form">
+          <label for="directory-input">Directory</label>
+          <div class="controls__input-group">
+            <input
+              id="directory-input"
+              type="text"
+              name="dir"
+              placeholder="."
+              autocomplete="off"
+              aria-label="Directory containing auto_code_review.md"
+            />
+            <button type="submit">Load</button>
+          </div>
+        </form>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+        <div id="last-updated" class="status status--muted"></div>
+      </section>
+      <section id="content" class="content">
+        <p class="placeholder">Select a directory to view its <code>auto_code_review.md</code>.</p>
+      </section>
+    </main>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

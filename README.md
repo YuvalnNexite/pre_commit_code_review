@@ -47,6 +47,31 @@ for macOS/Linux:
 curl https://cursor.com/install -fsS | bash
 ```
 
+
+## Review Viewer
+
+An optional Flask web application is available to inspect `auto_code_review.md` files with live refresh support.
+
+### Requirements
+
+Install Flask (and its dependencies) into your Python environment:
+
+```bash
+pip install flask
+```
+
+No additional packages are required—the server polls the filesystem for changes.
+
+### Running the server
+
+```bash
+python scripts/review_viewer/app.py
+```
+
+By default the viewer listens on `http://0.0.0.0:5000`. You can customise the host/port using the environment variables `REVIEW_VIEWER_HOST` and `REVIEW_VIEWER_PORT` (or `PORT`).
+
+Open `http://localhost:5000/` in your browser and select the repository directory that contains the `auto_code_review.md` you want to inspect. The UI renders the Markdown locally—including `diff` code blocks with inline highlighting—and automatically refreshes whenever the file changes. Live updates are delivered over Server-Sent Events, so the page stays in sync without manual reloads.
+
 ## Memory Usage
 To use the persistent memory feature put a code_review_memory directory in the project root and follow the template to create consept.md memory files.
 The AI will consult the memory file when he finds the name of the file related to the changed text.
