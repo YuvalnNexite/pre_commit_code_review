@@ -1,0 +1,19 @@
+services:
+  viewer:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - SRC_DIR=/data
+      - FILENAME=${ACR_FILENAME:-auto_code_review.md}
+    volumes:
+      - ${ACR_SOURCE:-./data}:/data:ro
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /usr/src/app
+        - action: rebuild
+          path: ./app/package.json
+        - action: rebuild
+          path: ./Dockerfile
