@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auto Code Review Viewer</title>
+    <script>
+      tailwind = {
+        config: {
+          darkMode: 'class',
+          theme: {
+            extend: {
+              colors: {
+                brand: {
+                  50: '#eef2ff',
+                  500: '#4f46e5',
+                  600: '#4338ca'
+                }
+              },
+              boxShadow: {
+                header: '0 10px 25px -20px rgba(15, 23, 42, 0.7)'
+              }
+            }
+          }
+        }
+      };
+    </script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <link
+      id="hljs-light"
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css"
+      integrity="sha512-f3fUy6oyboTfp9khSdJj0dk8Z6kOKeZBT5Zzm4jcbmUFzmIum10lANphHz2Xee3RG6Nnz33rgxmzkqOovu0QcQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link
+      id="hljs-dark"
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+      integrity="sha512-Qcj2tjhL1k4UJgSMuY1OJQrY1hi83CrQn+E21c/Q5v4VXtCaw2V4ckQkZOdhZlJq0pWjTB57TUzRAFGa5Nft6g=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+      disabled
+    />
+    <style>
+      body {
+        font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      }
+      pre code {
+        font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      }
+      pre {
+        border-radius: 0.75rem;
+      }
+      .prose pre {
+        padding: 1rem;
+      }
+      .prose code {
+        border-radius: 0.375rem;
+      }
+      .prose :where(code):not(:where([class~="not-prose"] *)) {
+        background-color: rgba(15, 23, 42, 0.05);
+        padding: 0.125rem 0.375rem;
+      }
+      html.dark .prose :where(code):not(:where([class~="not-prose"] *)) {
+        background-color: rgba(148, 163, 184, 0.12);
+      }
+      html.dark body {
+        background-color: #0f172a;
+      }
+    </style>
+  </head>
+  <body class="min-h-full bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div class="flex min-h-screen flex-col">
+      <header class="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/80">
+        <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div class="flex-1 text-left text-base font-semibold tracking-tight sm:text-lg">
+            Auto Code Review Viewer
+          </div>
+          <div class="hidden flex-1 overflow-hidden text-center text-xs font-medium text-slate-500 dark:text-slate-400 sm:block sm:text-sm">
+            Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span> from
+            <span class="truncate text-slate-500 dark:text-slate-400">{{FILE_PATH}}</span>
+          </div>
+          <div class="flex flex-1 justify-end">
+            <button
+              id="theme-toggle"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-white"
+            >
+              <span aria-hidden="true" id="theme-toggle-icon">🌙</span>
+              <span id="theme-toggle-label">Dark mode</span>
+            </button>
+          </div>
+        </div>
+        <div class="block border-t border-slate-200/70 px-4 py-2 text-xs text-slate-500 dark:border-slate-800/60 dark:text-slate-400 sm:hidden">
+          Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span>
+          <div class="truncate overflow-hidden text-[11px] text-slate-500 dark:text-slate-400">{{FILE_PATH}}</div>
+        </div>
+      </header>
+      <main class="flex-1">
+        <div class="mx-auto w-full max-w-4xl px-4 pb-10 pt-6 sm:px-6">
+          <article class="prose prose-slate max-w-none dark:prose-invert">
+            {{CONTENT}}
+          </article>
+        </div>
+      </main>
+      <footer class="border-t border-slate-200/70 bg-white/70 py-3 text-sm text-slate-500 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/70 dark:text-slate-400">
+        <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 sm:px-6">
+          <span id="status-line" class="text-slate-500 dark:text-slate-400">Watching for changes…</span>
+          <span class="hidden text-xs sm:block">Auto-refresh enabled</span>
+        </div>
+      </footer>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-b8qFkC4bIZfv5Ih0b07XHkTTwxabycufV7g9cMPed+0YLsFd1oS29Jym+wIpLW6+BFmGoG9PMa2wiuVdbTNjlQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/diff.min.js" integrity="sha512-f9GtPgNj0JfnYuxzsDgVKfd3RewZF8nPULz/0NkGi/Sd35rEJMMHSdOQcgynb43S/G/Sq0yYMpnt/kFBTw+Fxg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+      const themeToggle = document.getElementById('theme-toggle');
+      const statusLine = document.getElementById('status-line');
+      const themeToggleLabel = document.getElementById('theme-toggle-label');
+      const themeToggleIcon = document.getElementById('theme-toggle-icon');
+      const hljsLight = document.getElementById('hljs-light');
+      const hljsDark = document.getElementById('hljs-dark');
+
+      function applyHighlightTheme(mode) {
+        if (!hljsLight || !hljsDark) return;
+        if (mode === 'dark') {
+          hljsLight.disabled = true;
+          hljsDark.disabled = false;
+        } else {
+          hljsLight.disabled = false;
+          hljsDark.disabled = true;
+        }
+      }
+
+      function setTheme(mode) {
+        const root = document.documentElement;
+        if (mode === 'dark') {
+          root.classList.add('dark');
+          themeToggleLabel.textContent = 'Light mode';
+          themeToggleIcon.textContent = '☀️';
+        } else {
+          root.classList.remove('dark');
+          themeToggleLabel.textContent = 'Dark mode';
+          themeToggleIcon.textContent = '🌙';
+        }
+        applyHighlightTheme(mode);
+      }
+
+      function getPreferredTheme() {
+        const stored = window.localStorage.getItem('acr-theme');
+        if (stored === 'dark' || stored === 'light') {
+          return stored;
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+
+      function toggleTheme() {
+        const root = document.documentElement;
+        const isDark = root.classList.contains('dark');
+        const next = isDark ? 'light' : 'dark';
+        window.localStorage.setItem('acr-theme', next);
+        setTheme(next);
+      }
+
+      setTheme(getPreferredTheme());
+      themeToggle?.addEventListener('click', toggleTheme);
+
+      let lastSeenMtime = null;
+      let polling = true;
+
+      function formatTimestamp(ms) {
+        const date = new Date(ms);
+        return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+      }
+
+      async function pollMtime() {
+        try {
+          const response = await fetch('/mtime', { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          const payload = await response.json();
+          if (typeof payload.mtimeMs === 'number') {
+            if (lastSeenMtime && payload.mtimeMs > lastSeenMtime) {
+              window.location.reload();
+              return;
+            }
+            lastSeenMtime = payload.mtimeMs;
+            if (statusLine) {
+              statusLine.textContent = `Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`;
+              statusLine.classList.remove('text-red-500');
+              statusLine.classList.add('text-slate-500', 'dark:text-slate-400');
+            }
+          }
+          polling = true;
+        } catch (error) {
+          polling = false;
+          if (statusLine) {
+            statusLine.textContent = 'Disconnected. Retrying…';
+            statusLine.classList.remove('text-slate-500', 'dark:text-slate-400');
+            statusLine.classList.add('text-red-500');
+          }
+          console.error('Failed to poll /mtime', error);
+        } finally {
+          setTimeout(pollMtime, polling ? 2000 : 4000);
+        }
+      }
+
+      hljs.highlightAll();
+      pollMtime();
+    </script>
+  </body>
+</html>
