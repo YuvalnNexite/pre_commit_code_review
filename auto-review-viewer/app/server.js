@@ -11,14 +11,13 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
-const DEFAULT_SRC_DIR = path.resolve(process.env.SRC_DIR || '/data');
 const FILENAME = process.env.FILENAME || 'auto_code_review.md';
 const PORT = Number(process.env.PORT || 3000);
 
-let currentSourceDirectory = DEFAULT_SRC_DIR;
-let targetPath = path.resolve(currentSourceDirectory, FILENAME);
+let currentSourceDirectory = null;
+let targetPath = null;
 const templatePath = path.join(__dirname, 'templates', 'index.html');
-const REPO_DIR = process.env.REPO_DIR ? path.resolve(process.env.REPO_DIR) : DEFAULT_SRC_DIR;
+const REPO_DIR = process.env.REPO_DIR ? path.resolve(process.env.REPO_DIR) : process.cwd();
 
 const md = new MarkdownIt({
   html: true,
@@ -36,24 +35,38 @@ function getReviewSource() {
   };
 }
 
+function normalizeDirectorySeparators(value) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  if (path.sep === '\\') {
+    return value.replace(/\//g, '\\');
+  }
+  return value.replace(/\\/g, '/');
+}
+
 function resolveSourceDirectory(input) {
   if (typeof input !== 'string') {
-    return DEFAULT_SRC_DIR;
+    return null;
   }
   const trimmed = input.trim();
   if (!trimmed) {
-    return DEFAULT_SRC_DIR;
+    return null;
   }
-  return path.resolve(trimmed);
+  const normalized = normalizeDirectorySeparators(trimmed);
+  return path.resolve(normalized);
 }
 
 function updateSourceDirectory(nextDirectory) {
   currentSourceDirectory = nextDirectory;
-  targetPath = path.resolve(currentSourceDirectory, FILENAME);
+  targetPath = currentSourceDirectory ? path.resolve(currentSourceDirectory, FILENAME) : null;
   return getReviewSource();
 }
 
 async function checkReviewFileExists() {
+  if (!targetPath) {
+    return false;
+  }
   try {
     await fs.promises.access(targetPath, fs.constants.R_OK);
     return true;
@@ -96,6 +109,11 @@ async function loadTemplate() {
 
 async function readMarkdownFile() {
   const { path: reviewPath } = getReviewSource();
+  if (!reviewPath) {
+    const error = new Error('Review folder not configured.');
+    error.code = 'ENOENT';
+    throw error;
+  }
   logger.logDebug('Reading markdown review file', { targetPath: reviewPath });
   const content = await fs.promises.readFile(reviewPath, 'utf8');
   logger.logDebug('Finished reading markdown review file', {
@@ -107,9 +125,10 @@ async function readMarkdownFile() {
 
 function injectTemplate(template, renderedMarkdown) {
   const { path: reviewPath } = getReviewSource();
+  const displayPath = reviewPath || 'Not configured';
   return template
     .replace(/\{\{FILE_NAME\}\}/g, FILENAME)
-    .replace(/\{\{FILE_PATH\}\}/g, reviewPath)
+    .replace(/\{\{FILE_PATH\}\}/g, displayPath)
     .replace(/\{\{CONTENT\}\}/g, renderedMarkdown);
 }
 
@@ -126,21 +145,33 @@ app.get('/', async (req, res) => {
     let markdown = '';
     let missingReviewFile = false;
 
-    try {
-      markdown = await readMarkdownFile();
-    } catch (error) {
-      if (error && error.code === 'ENOENT') {
-        missingReviewFile = true;
-        const { path: reviewPath } = getReviewSource();
-        logger.logWarn('Review markdown file not found while rendering index page', {
-          requestId,
-          reviewPath
-        });
-        markdown = `# Review file not found\n\nThe configured folder does not contain \`${FILENAME}\`.\n\n` +
-          `**Current location:** \`${reviewPath}\`\n\n` +
-          'You can update the folder path from the settings menu.';
-      } else {
-        throw error;
+    const { path: reviewPath } = getReviewSource();
+
+    if (!reviewPath) {
+      missingReviewFile = true;
+      logger.logWarn('Review folder not configured while rendering index page', {
+        requestId
+      });
+      markdown = `# Review folder not configured\n\n` +
+        `No folder has been selected for \`${FILENAME}\` yet.\n\n` +
+        'Open the settings menu and choose the folder that contains the review file.';
+    } else {
+      try {
+        markdown = await readMarkdownFile();
+      } catch (error) {
+        if (error && error.code === 'ENOENT') {
+          missingReviewFile = true;
+          logger.logWarn('Review markdown file not found while rendering index page', {
+            requestId,
+            reviewPath
+          });
+          markdown = `# Review file not found\n\n` +
+            `The selected folder does not contain \`${FILENAME}\`.\n\n` +
+            `**Current location:** \`${reviewPath}\`\n\n` +
+            'You can update the folder path from the settings menu.';
+        } else {
+          throw error;
+        }
       }
     }
 
@@ -153,11 +184,15 @@ app.get('/', async (req, res) => {
     res.send(html);
     logger.logInfo('Served index page successfully', {
       requestId,
-      missingReviewFile
+      missingReviewFile,
+      reviewPath
     });
   } catch (error) {
-    const message = error.code === 'ENOENT'
+    const missingMessage = targetPath
       ? `Could not find markdown file at ${targetPath}`
+      : 'Review folder not configured.';
+    const message = error.code === 'ENOENT'
+      ? missingMessage
       : 'Failed to render markdown file.';
     const details = error.message || 'Unknown error';
     logger.logError('Failed to serve index page', {
@@ -179,9 +214,13 @@ app.get('/api/assessments/bad', async (req, res) => {
     method: req.method
   });
   try {
+    const reviewPath = targetPath;
+    const statsPromise = reviewPath
+      ? fs.promises.stat(reviewPath).catch(() => null)
+      : Promise.resolve(null);
     const [markdown, stats] = await Promise.all([
       readMarkdownFile(),
-      fs.promises.stat(targetPath).catch(() => null)
+      statsPromise
     ]);
     const assessments = parseBadAssessments(markdown);
 
@@ -215,9 +254,12 @@ app.get('/api/assessments/bad', async (req, res) => {
       error
     });
     const status = error.code === 'ENOENT' ? 404 : 500;
+    const responseMessage = status === 404
+      ? error.message || 'Review file not found.'
+      : 'Failed to parse review file.';
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.status(status).json({
-      error: status === 404 ? 'Review file not found.' : 'Failed to parse review file.',
+      error: responseMessage,
       details: error.message
     });
   }
@@ -300,10 +342,11 @@ app.post('/api/assessments/:id/apply', async (req, res) => {
     });
   } catch (error) {
     const status = error.code === 'ENOENT' ? 404 : error.exitCode ? 409 : 500;
+    const responseMessage = status === 404 ? (error.message || 'Review file not found.') : error.message;
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.status(status).json({
       success: false,
-      error: status === 404 ? 'Review file not found.' : error.message,
+      error: responseMessage,
       stdout: error.stdout || '',
       stderr: error.stderr || ''
     });
@@ -386,6 +429,17 @@ app.get('/mtime', async (req, res) => {
     path: req.path
   });
   try {
+    if (!targetPath) {
+      logger.logWarn('Mtime requested without configured review folder', {
+        requestId
+      });
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.status(404).json({
+        error: 'Review folder not configured.',
+        file: FILENAME
+      });
+      return;
+    }
     const stats = await fs.promises.stat(targetPath);
     logger.logInfo('Resolved mtime', {
       requestId,
@@ -424,6 +478,10 @@ app.get('/healthz', (req, res) => {
 
 function ensureSourceDirectory() {
   const { path: reviewPath } = getReviewSource();
+  if (!reviewPath) {
+    logger.logInfo('Skipping markdown source verification: no folder configured yet.');
+    return Promise.resolve();
+  }
   return fs.promises.access(reviewPath, fs.constants.R_OK)
     .then(() => {
       logger.logInfo('Verified markdown source is accessible', { targetPath: reviewPath });
@@ -447,6 +505,7 @@ async function start() {
   logger.logInfo('Starting Auto Code Review Viewer server', {
     port: PORT,
     reviewFile: reviewPath,
+    reviewFolderConfigured: Boolean(reviewPath),
     repoDirectory: REPO_DIR
   });
 
@@ -455,6 +514,7 @@ async function start() {
     logger.logInfo('Auto Code Review Viewer listening', {
       port: PORT,
       reviewFile: listenReviewPath,
+      reviewFolderConfigured: Boolean(listenReviewPath),
       repoDirectory: REPO_DIR
     });
   });

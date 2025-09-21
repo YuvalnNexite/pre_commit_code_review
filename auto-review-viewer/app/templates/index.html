@@ -530,6 +530,7 @@
       const REVIEW_DIRECTORY_STATUS_CLASS_MAP = {
         neutral: ['text-slate-500', 'dark:text-slate-400'],
         success: ['text-emerald-600', 'dark:text-emerald-300'],
+        warning: ['text-amber-600', 'dark:text-amber-300'],
         error: ['text-rose-600', 'dark:text-rose-300']
       };
       const REVIEW_DIRECTORY_STATUS_CLASSES = Array.from(
@@ -770,12 +771,15 @@
         classes.forEach((cls) => reviewDirectoryStatus.classList.add(cls));
       }
 
+      function isDirectoryConfigured(directory) {
+        return typeof directory === 'string' && directory.trim() !== '';
+      }
+
       function formatDirectoryLabel(directory) {
-        if (typeof directory !== 'string') {
-          return 'the default folder';
+        if (!isDirectoryConfigured(directory)) {
+          return '';
         }
-        const trimmed = directory.trim();
-        return trimmed ? trimmed : 'the default folder';
+        return directory.trim();
       }
 
       async function loadReviewSource(options = {}) {
@@ -792,20 +796,28 @@
           }
           const data = await response.json();
           reviewSourceInfo = data;
-          if (reviewDirectoryInput && typeof data.directory === 'string') {
-            reviewDirectoryInput.value = data.directory;
+          const hasDirectory = isDirectoryConfigured(data.directory);
+          if (reviewDirectoryInput) {
+            reviewDirectoryInput.value = hasDirectory ? data.directory : '';
           }
-          const directoryLabel = formatDirectoryLabel(data.directory);
-          if (data.exists) {
+          if (!hasDirectory) {
+            setReviewDirectoryStatus(
+              `Enter a folder path to load ${reviewFileName}.`,
+              'warning'
+            );
+            setStatusLine('Waiting for a folder selection…', 'warning');
+          } else if (data.exists) {
+            const directoryLabel = formatDirectoryLabel(data.directory);
             setReviewDirectoryStatus(
               `Looking for ${reviewFileName} in ${directoryLabel}.`,
               'neutral'
             );
             setStatusLine(`Watching for changes in ${directoryLabel}…`, 'neutral');
           } else {
+            const directoryLabel = formatDirectoryLabel(data.directory);
             setReviewDirectoryStatus(
               `${reviewFileName} not found in ${directoryLabel}.`,
-              'error'
+              'warning'
             );
             setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
           }
@@ -833,11 +845,18 @@
           }
           const data = await response.json();
           reviewSourceInfo = data;
-          if (reviewDirectoryInput && typeof data.directory === 'string') {
-            reviewDirectoryInput.value = data.directory;
+          const hasDirectory = isDirectoryConfigured(data.directory);
+          if (reviewDirectoryInput) {
+            reviewDirectoryInput.value = hasDirectory ? data.directory : '';
           }
-          const directoryLabel = formatDirectoryLabel(data.directory);
-          if (data.exists) {
+          if (!hasDirectory) {
+            setReviewDirectoryStatus(
+              `Enter a folder path to load ${reviewFileName}.`,
+              'warning'
+            );
+            setStatusLine('Waiting for a folder selection…', 'warning');
+          } else if (data.exists) {
+            const directoryLabel = formatDirectoryLabel(data.directory);
             setReviewDirectoryStatus(
               `Found ${reviewFileName} in ${directoryLabel}. Reloading…`,
               'success'
@@ -850,9 +869,10 @@
               window.location.reload();
             }, 400);
           } else {
+            const directoryLabel = formatDirectoryLabel(data.directory);
             setReviewDirectoryStatus(
               `${reviewFileName} not found in ${directoryLabel}.`,
-              'error'
+              'warning'
             );
             setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
           }
@@ -1529,12 +1549,22 @@
             if (reviewSourceInfo) {
               reviewSourceInfo.exists = false;
             }
-            const directoryLabel = formatDirectoryLabel(reviewSourceInfo?.directory);
-            setReviewDirectoryStatus(
-              `${reviewFileName} not found in ${directoryLabel}.`,
-              'error'
-            );
-            setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
+            const directory = reviewSourceInfo?.directory;
+            const hasDirectory = isDirectoryConfigured(directory);
+            if (!hasDirectory) {
+              setReviewDirectoryStatus(
+                `Enter a folder path to load ${reviewFileName}.`,
+                'warning'
+              );
+              setStatusLine('Waiting for a folder selection…', 'warning');
+            } else {
+              const directoryLabel = formatDirectoryLabel(directory);
+              setReviewDirectoryStatus(
+                `${reviewFileName} not found in ${directoryLabel}.`,
+                'warning'
+              );
+              setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
+            }
             return;
           }
           if (!response.ok) {
@@ -1550,12 +1580,21 @@
             if (reviewSourceInfo) {
               reviewSourceInfo.exists = true;
             }
-            const directoryLabel = formatDirectoryLabel(reviewSourceInfo?.directory);
-            setReviewDirectoryStatus(
-              `Looking for ${reviewFileName} in ${directoryLabel}.`,
-              'neutral'
-            );
-            setStatusLine(`Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`, 'neutral');
+            const directory = reviewSourceInfo?.directory;
+            if (isDirectoryConfigured(directory)) {
+              const directoryLabel = formatDirectoryLabel(directory);
+              setReviewDirectoryStatus(
+                `Looking for ${reviewFileName} in ${directoryLabel}.`,
+                'neutral'
+              );
+              setStatusLine(`Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`, 'neutral');
+            } else {
+              setReviewDirectoryStatus(
+                `Watching for updates to ${reviewFileName}.`,
+                'neutral'
+              );
+              setStatusLine(`Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`, 'neutral');
+            }
           }
           polling = true;
         } catch (error) {
