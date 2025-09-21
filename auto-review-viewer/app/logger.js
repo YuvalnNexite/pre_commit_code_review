@@ -4,6 +4,7 @@ const path = require('path');
 const LOG_FILE_PATH = path.join(__dirname, '..', 'new.log');
 const MAX_STRING_LENGTH = 2000;
 const LOG_TO_CONSOLE = process.env.LOG_TO_CONSOLE === 'true';
+const LOG_TO_FILE = process.env.LOG_TO_FILE === 'true';
 
 function truncateString(value) {
   if (typeof value !== 'string') {
@@ -103,10 +104,12 @@ function writeLog(level, message, metadata) {
   }
   line += '\n';
 
-  fs.promises.appendFile(LOG_FILE_PATH, line).catch((error) => {
-    const consoleLine = `[${timestamp}] [ERROR] Failed to write log entry`;
-    console.error(consoleLine, sanitizeForLog(error));
-  });
+  if (LOG_TO_FILE) {
+    fs.promises.appendFile(LOG_FILE_PATH, line).catch((error) => {
+      const consoleLine = `[${timestamp}] [ERROR] Failed to write log entry`;
+      console.error(consoleLine, sanitizeForLog(error));
+    });
+  }
 
   if (level === 'ERROR') {
     const consoleLine = `[${timestamp}] [${level}] ${textMessage}`;

@@ -15,6 +15,7 @@ const FILENAME = process.env.FILENAME || 'auto_code_review.md';
 const PORT = Number(process.env.PORT || 3000);
 
 let currentSourceDirectory = null;
+let currentSourceDirectoryInput = '';
 let targetPath = null;
 const templatePath = path.join(__dirname, 'templates', 'index.html');
 const REPO_DIR = process.env.REPO_DIR ? path.resolve(process.env.REPO_DIR) : process.cwd();
@@ -29,7 +30,7 @@ let cachedTemplate = null;
 
 function getReviewSource() {
   return {
-    directory: currentSourceDirectory,
+    directory: currentSourceDirectoryInput,
     filename: FILENAME,
     path: targetPath
   };
@@ -39,10 +40,10 @@ function normalizeDirectorySeparators(value) {
   if (typeof value !== 'string') {
     return value;
   }
-  if (path.sep === '\\') {
-    return value.replace(/\//g, '\\');
+  if (path.sep === path.win32.sep) {
+    return value.split('/').join(path.win32.sep);
   }
-  return value.replace(/\\/g, '/');
+  return value.split(path.win32.sep).join('/');
 }
 
 function resolveSourceDirectory(input) {
@@ -57,8 +58,13 @@ function resolveSourceDirectory(input) {
   return path.resolve(normalized);
 }
 
-function updateSourceDirectory(nextDirectory) {
+function updateSourceDirectory(nextDirectory, rawInput) {
   currentSourceDirectory = nextDirectory;
+  if (typeof rawInput === 'string') {
+    currentSourceDirectoryInput = rawInput;
+  } else if (!nextDirectory) {
+    currentSourceDirectoryInput = '';
+  }
   targetPath = currentSourceDirectory ? path.resolve(currentSourceDirectory, FILENAME) : null;
   return getReviewSource();
 }
@@ -124,8 +130,8 @@ async function readMarkdownFile() {
 }
 
 function injectTemplate(template, renderedMarkdown) {
-  const { path: reviewPath } = getReviewSource();
-  const displayPath = reviewPath || 'Not configured';
+  const { path: reviewPath, directory } = getReviewSource();
+  const displayPath = directory || reviewPath || 'Not configured';
   return template
     .replace(/\{\{FILE_NAME\}\}/g, FILENAME)
     .replace(/\{\{FILE_PATH\}\}/g, displayPath)
@@ -401,6 +407,8 @@ app.get('/api/review-source', async (req, res) => {
 app.post('/api/review-source', async (req, res) => {
   const requestId = createRequestId();
   const rawDirectory = typeof req.body?.directory === 'string' ? req.body.directory : '';
+  const trimmedDirectory = rawDirectory.trim();
+  const normalizedInput = trimmedDirectory ? normalizeDirectorySeparators(trimmedDirectory) : '';
   const resolvedDirectory = resolveSourceDirectory(rawDirectory);
   const previous = getReviewSource();
 
@@ -408,10 +416,11 @@ app.post('/api/review-source', async (req, res) => {
     requestId,
     previousDirectory: previous.directory,
     requestedDirectory: rawDirectory,
+    normalizedDirectory: normalizedInput,
     resolvedDirectory
   });
 
-  const updated = updateSourceDirectory(resolvedDirectory);
+  const updated = updateSourceDirectory(resolvedDirectory, normalizedInput);
   const exists = await checkReviewFileExists();
 
   res.setHeader('Cache-Control', 'no-store, max-age=0');

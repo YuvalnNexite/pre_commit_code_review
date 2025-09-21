@@ -4,43 +4,44 @@ Render `auto_code_review.md` from a mounted directory with a polished, shareable
 
 ## Features
 
-- 📄 Reads Markdown from a mounted directory (`/data/auto_code_review.md` by default).
-- 🎨 Beautiful typography powered by Tailwind's typography plugin and highlight.js.
-- 🌓 Sticky header with live file path display and dark mode toggle.
-- 🔁 Automatic refresh when the source file changes (polls `GET /mtime`).
-- 💓 Health check endpoint at `GET /healthz` for container monitoring.
+- Reads Markdown from a mounted directory (defaults to `SRC_DIR`/`FILENAME`).
+- Clean typography with Tailwind and highlight.js.
+- Sticky header with live file path display and dark mode toggle.
+- Auto-refresh when the source file changes (polls `GET /mtime`).
+- Health check endpoint at `GET /healthz` for container monitoring.
 
 ## Project structure
 
 ```
 auto-review-viewer/
-├─ app/
-│  ├─ server.js
-│  ├─ package.json
-│  └─ templates/
-│     └─ index.html
-├─ Dockerfile
-├─ docker-compose.yml
-└─ README.md
+  app/
+    server.js
+    package.json
+    templates/
+      index.html
+  Dockerfile
+  docker-compose.yml
+  README.md
 ```
 
 ## Configuration
 
-| Variable   | Default                | Description                                   |
-|------------|------------------------|-----------------------------------------------|
-| `SRC_DIR`  | `/data`                | Directory inside the container to read from. |
-| `FILENAME` | `auto_code_review.md`  | File name to render inside `SRC_DIR`.         |
-| `PORT`     | `3000`                 | Port exposed by the Express server.          |
+| Variable   | Default               | Description                                  |
+|----------- |-----------------------|----------------------------------------------|
+| `SRC_DIR`  | `/data`               | Directory inside the container to read from. |
+| `FILENAME` | `auto_code_review.md` | File name to render inside `SRC_DIR`.        |
+| `PORT`     | `3000`                | Port exposed by the Express server.          |
 
 ## Local development
 
 ```bash
 cd auto-review-viewer/app
 npm install
+# Optionally set where to read the markdown from:
 SRC_DIR=/path/to/data FILENAME=auto_code_review.md npm start
 ```
 
-The app serves the UI at [http://localhost:3000](http://localhost:3000).
+On startup, the server uses `SRC_DIR` (if provided) as the default folder for `FILENAME`. The app serves the UI at http://localhost:3000.
 
 ## Docker
 
@@ -76,10 +77,14 @@ Environment variables:
 
 ## Endpoints
 
-- `GET /` – render the Markdown file as rich HTML.
-- `GET /mtime` – return the file's last modified timestamp (`{ mtimeMs, iso }`).
-- `GET /healthz` – simple health check returning `{ status: "ok" }`.
+- `GET /` render the Markdown file as rich HTML.
+- `GET /mtime` return the file's last modified timestamp (`{ mtimeMs, iso }`).
+- `GET /healthz` simple health check returning `{ status: "ok" }`.
 
 ## Future enhancements
 
 The rendering pipeline is centralized in `server.js` so future features (BAD code annotations, diff-specific actions, WebSockets, etc.) can be layered without rewriting the core. The Docker base already includes Git to support git-aware functionality later on.
+
+## Logging
+
+By default, logs print to console only when `LOG_TO_CONSOLE=true`. File logging is optional to reduce I/O; enable it with `LOG_TO_FILE=true` (writes to `new.log`).
