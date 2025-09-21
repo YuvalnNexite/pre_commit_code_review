@@ -199,6 +199,36 @@ function ensureTrailingNewline(text) {
   return `${text}\n`;
 }
 
+function isDubiousOwnershipError(error) {
+  if (!error) {
+    return false;
+  }
+  const stderr = typeof error.stderr === 'string' ? error.stderr.toLowerCase() : '';
+  const stdout = typeof error.stdout === 'string' ? error.stdout.toLowerCase() : '';
+  const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+  return stderr.includes('dubious ownership') || stdout.includes('dubious ownership') || message.includes('dubious ownership');
+}
+
+async function ensureRepoIsSafe(repoDir) {
+  if (typeof repoDir !== 'string' || repoDir.trim() === '') {
+    return;
+  }
+
+  const sanitizedPath = repoDir.replace(/\\/g, '/');
+
+  try {
+    await runGitCommand(['config', '--global', '--add', 'safe.directory', sanitizedPath], process.cwd());
+    logger.logInfo('Registered git safe.directory entry for repository', {
+      repoDir: sanitizedPath
+    });
+  } catch (error) {
+    logger.logWarn('Failed to register git safe.directory entry', {
+      repoDir: sanitizedPath,
+      error
+    });
+  }
+}
+
 function runGitCommand(args, cwd, diffText) {
   return new Promise((resolve, reject) => {
     logger.logInfo('Running git command', {
@@ -278,9 +308,13 @@ async function applySuggestionDiff(diffText, repoDir) {
     diffLength: normalizedDiff.length
   });
 
+  const attemptApply = async () => {
+    await runGitCommand(['apply', '--check', '--ignore-whitespace', '--whitespace=nowarn'], repoDir, normalizedDiff);
+    return runGitCommand(['apply', '--ignore-whitespace', '--whitespace=nowarn'], repoDir, normalizedDiff);
+  };
+
   try {
-    await runGitCommand(['apply', '--check', '--whitespace=nowarn'], repoDir, normalizedDiff);
-    const result = await runGitCommand(['apply', '--whitespace=nowarn'], repoDir, normalizedDiff);
+    const result = await attemptApply();
     logger.logInfo('applySuggestionDiff succeeded', {
       repoDir,
       diffLength: normalizedDiff.length,
@@ -289,6 +323,30 @@ async function applySuggestionDiff(diffText, repoDir) {
     });
     return result;
   } catch (error) {
+    if (isDubiousOwnershipError(error)) {
+      logger.logWarn('git apply failed due to dubious ownership; retrying after registering safe.directory', {
+        repoDir,
+        error
+      });
+      await ensureRepoIsSafe(repoDir);
+      try {
+        const retryResult = await attemptApply();
+        logger.logInfo('applySuggestionDiff succeeded after registering safe.directory', {
+          repoDir,
+          diffLength: normalizedDiff.length,
+          stdout: retryResult.stdout,
+          stderr: retryResult.stderr
+        });
+        return retryResult;
+      } catch (retryError) {
+        logger.logError('Retry after registering safe.directory failed', {
+          repoDir,
+          error: retryError
+        });
+        throw retryError;
+      }
+    }
+
     logger.logError('applySuggestionDiff failed', {
       repoDir,
       error
@@ -301,4 +359,5 @@ module.exports = {
   parseBadAssessments,
   applySuggestionDiff
 };
+
 

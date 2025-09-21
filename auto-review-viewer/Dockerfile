@@ -11,6 +11,7 @@ WORKDIR /usr/src/app
 ENV NODE_ENV=production \
     SRC_DIR=/data \
     FILENAME=auto_code_review.md \
+    REPO_DIR=/data \
     PORT=3000
 
 COPY app/package*.json ./
