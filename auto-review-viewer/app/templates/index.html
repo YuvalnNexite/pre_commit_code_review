@@ -139,16 +139,36 @@
       }
     </style>
   </head>
-  <body class="min-h-full bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+  <body
+    class="min-h-full bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+    data-review-root="{{ROOT_PATH_ATTR}}"
+    data-default-root="{{DEFAULT_ROOT_PATH_ATTR}}"
+  >
     <div class="flex min-h-screen flex-col">
       <header class="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/80">
         <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div class="flex-1 text-left text-base font-semibold tracking-tight sm:text-lg">
             Auto Code Review Viewer
           </div>
-          <div class="hidden flex-1 overflow-hidden text-center text-xs font-medium text-slate-500 dark:text-slate-400 sm:block sm:text-sm">
-            Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span> from
-            <span class="truncate text-slate-500 dark:text-slate-400">{{FILE_PATH}}</span>
+          <div
+            class="hidden flex-1 items-center justify-center gap-2 overflow-hidden text-xs font-medium text-slate-500 dark:text-slate-400 sm:flex sm:text-sm"
+          >
+            <span class="whitespace-nowrap">
+              Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span> from
+            </span>
+            <span
+              class="root-path-display min-w-0 truncate text-slate-500 dark:text-slate-400"
+              title="{{ROOT_PATH}}"
+            >
+              {{ROOT_PATH}}
+            </span>
+            <button
+              type="button"
+              class="root-change-button flex-shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-white"
+              title="Change the review root directory"
+            >
+              Change
+            </button>
           </div>
           <div class="flex flex-1 items-center justify-end gap-3">
             <div class="relative">
@@ -210,8 +230,19 @@
           </div>
         </div>
         <div class="block border-t border-slate-200/70 px-4 py-2 text-xs text-slate-500 dark:border-slate-800/60 dark:text-slate-400 sm:hidden">
-          Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span>
-          <div class="truncate overflow-hidden text-[11px] text-slate-500 dark:text-slate-400">{{FILE_PATH}}</div>
+          <div class="mb-1 flex items-center justify-between gap-2">
+            <span>Viewing <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span></span>
+            <button
+              type="button"
+              class="root-change-button inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-white"
+              title="Change the review root directory"
+            >
+              Change
+            </button>
+          </div>
+          <div class="root-path-display truncate overflow-hidden text-[11px] text-slate-500 dark:text-slate-400" title="{{ROOT_PATH}}">
+            {{ROOT_PATH}}
+          </div>
         </div>
       </header>
       <main class="flex-1">
@@ -438,6 +469,8 @@
       const actionHelpPanel = document.getElementById('action-help-panel');
       const actionHelpClose = document.getElementById('action-help-close');
       const modeToggleButtons = document.querySelectorAll('[data-viewer-mode]');
+      const rootChangeButtons = document.querySelectorAll('.root-change-button');
+      const rootPathDisplays = document.querySelectorAll('.root-path-display');
 
       const FONT_SIZE_OPTIONS = {
         sm: '0.875rem',
@@ -536,6 +569,102 @@
           console.warn('Failed to log client event', error);
         }
       }
+
+      function getRootQueryValue() {
+        try {
+          const url = new URL(window.location.href);
+          const value = url.searchParams.get('root');
+          return typeof value === 'string' && value.trim() ? value.trim() : '';
+        } catch (error) {
+          console.warn('Failed to parse root query parameter', error);
+          return '';
+        }
+      }
+
+      const bodyDataset = document.body?.dataset || {};
+      const currentRootDirectory = bodyDataset.reviewRoot || '';
+      const defaultRootDirectory = bodyDataset.defaultRoot || currentRootDirectory;
+      const rootQueryValue = getRootQueryValue();
+
+      function updateRootDisplays() {
+        const displayValue = currentRootDirectory || defaultRootDirectory || '';
+        rootPathDisplays.forEach((element) => {
+          if (!element) return;
+          element.textContent = displayValue;
+          if (displayValue) {
+            element.setAttribute('title', displayValue);
+          } else {
+            element.removeAttribute('title');
+          }
+        });
+      }
+
+      updateRootDisplays();
+
+      function buildRootedUrl(pathname) {
+        if (!rootQueryValue) {
+          return pathname;
+        }
+        try {
+          const url = new URL(pathname, window.location.origin);
+          url.searchParams.set('root', rootQueryValue);
+          return url.pathname + url.search;
+        } catch (error) {
+          console.warn('Failed to build rooted URL', error);
+          return pathname;
+        }
+      }
+
+      function promptForRootDirectory() {
+        const baseMessage = defaultRootDirectory
+          ? `Enter the root directory that contains auto_code_review.md.
+Leave blank to use the default:
+${defaultRootDirectory}`
+          : 'Enter the root directory that contains auto_code_review.md.';
+        const initialValue = currentRootDirectory || defaultRootDirectory || '';
+        const input = window.prompt(baseMessage, initialValue);
+        if (input === null) {
+          logClientEvent('root_change_cancelled', {});
+          return;
+        }
+        const trimmed = input.trim();
+        const useDefault = trimmed === '' || trimmed === defaultRootDirectory;
+        const nextQueryValue = useDefault ? '' : trimmed;
+        if (nextQueryValue === rootQueryValue) {
+          logClientEvent('root_change_unchanged', {
+            previous: currentRootDirectory,
+            input: trimmed
+          });
+          return;
+        }
+        try {
+          const url = new URL(window.location.href);
+          if (nextQueryValue) {
+            url.searchParams.set('root', nextQueryValue);
+          } else {
+            url.searchParams.delete('root');
+          }
+          logClientEvent('root_change_requested', {
+            previous: currentRootDirectory,
+            next: useDefault ? defaultRootDirectory : trimmed,
+            usedDefault: useDefault
+          });
+          window.location.href = url.toString();
+        } catch (error) {
+          console.error('Failed to update root directory', error);
+          logClientEvent('root_change_error', {
+            message: error.message || 'unknown_error',
+            input: trimmed
+          });
+        }
+      }
+
+      rootChangeButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          promptForRootDirectory();
+        });
+      });
 
       function applyReadingPreferences(prefs) {
         const root = document.documentElement;
@@ -1009,7 +1138,7 @@
         showActionEmpty('Loading bad assessments…');
         setActionFeedback('info', 'Loading suggestions…');
         try {
-          const response = await fetch('/api/assessments/bad', { cache: 'no-store' });
+          const response = await fetch(buildRootedUrl('/api/assessments/bad'), { cache: 'no-store' });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
             const message = payload && typeof payload.error === 'string'
@@ -1126,7 +1255,7 @@
         const fileLabel = current.file ? ` for ${current.file}` : '';
         setActionFeedback('info', `Applying suggestion${fileLabel}…`);
         try {
-          const response = await fetch(`/api/assessments/${current.id}/apply`, {
+          const response = await fetch(buildRootedUrl(`/api/assessments/${current.id}/apply`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({})
@@ -1336,7 +1465,7 @@
 
       async function pollMtime() {
         try {
-          const response = await fetch('/mtime', { cache: 'no-store' });
+          const response = await fetch(buildRootedUrl('/mtime'), { cache: 'no-store' });
           if (!response.ok) {
             throw new Error(`Request failed with status ${response.status}`);
           }
