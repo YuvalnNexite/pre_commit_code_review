@@ -196,6 +196,44 @@
                       <option value="relaxed">Relaxed</option>
                     </select>
                   </div>
+                  <form
+                    id="review-directory-form"
+                    class="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700"
+                  >
+                    <div>
+                      <label
+                        for="review-directory-input"
+                        class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                      >
+                        Review folder
+                      </label>
+                      <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Choose the folder that contains <span class="font-semibold text-slate-700 dark:text-slate-200">{{FILE_NAME}}</span>.
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input
+                        id="review-directory-input"
+                        name="review-directory"
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        class="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="/path/to/folder"
+                      />
+                      <button
+                        id="review-directory-submit"
+                        type="submit"
+                        class="inline-flex items-center gap-2 rounded-full border border-brand-500 bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Update
+                      </button>
+                    </div>
+                    <p
+                      id="review-directory-status"
+                      class="text-xs text-slate-500 dark:text-slate-400"
+                    ></p>
+                  </form>
                 </div>
               </div>
             </div>
@@ -403,6 +441,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-b8qFkC4bIZfv5Ih0b07XHkTTwxabycufV7g9cMPed+0YLsFd1oS29Jym+wIpLW6+BFmGoG9PMa2wiuVdbTNjlQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/diff.min.js" integrity="sha512-f9GtPgNj0JfnYuxzsDgVKfd3RewZF8nPULz/0NkGi/Sd35rEJMMHSdOQcgynb43S/G/Sq0yYMpnt/kFBTw+Fxg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script>
+      const reviewFileName = '{{FILE_NAME}}';
       const themeToggle = document.getElementById('theme-toggle');
       const statusLine = document.getElementById('status-line');
       const themeToggleLabel = document.getElementById('theme-toggle-label');
@@ -438,6 +477,12 @@
       const actionHelpPanel = document.getElementById('action-help-panel');
       const actionHelpClose = document.getElementById('action-help-close');
       const modeToggleButtons = document.querySelectorAll('[data-viewer-mode]');
+      const reviewDirectoryForm = document.getElementById('review-directory-form');
+      const reviewDirectoryInput = document.getElementById('review-directory-input');
+      const reviewDirectoryStatus = document.getElementById('review-directory-status');
+      const reviewDirectorySubmit = document.getElementById('review-directory-submit');
+
+      let reviewSourceInfo = null;
 
       const FONT_SIZE_OPTIONS = {
         sm: '0.875rem',
@@ -481,6 +526,22 @@
         info: ['border-slate-300', 'bg-slate-100', 'text-slate-700', 'dark:border-slate-600', 'dark:bg-slate-800', 'dark:text-slate-200']
       };
       const ALL_FEEDBACK_CLASSES = Array.from(new Set(Object.values(FEEDBACK_CLASS_MAP).flat()));
+
+      const REVIEW_DIRECTORY_STATUS_CLASS_MAP = {
+        neutral: ['text-slate-500', 'dark:text-slate-400'],
+        success: ['text-emerald-600', 'dark:text-emerald-300'],
+        error: ['text-rose-600', 'dark:text-rose-300']
+      };
+      const REVIEW_DIRECTORY_STATUS_CLASSES = Array.from(
+        new Set(Object.values(REVIEW_DIRECTORY_STATUS_CLASS_MAP).flat())
+      );
+
+      const STATUS_LINE_CLASS_MAP = {
+        neutral: ['text-slate-500', 'dark:text-slate-400'],
+        warning: ['text-amber-500'],
+        error: ['text-red-500']
+      };
+      const STATUS_LINE_CLASSES = Array.from(new Set(Object.values(STATUS_LINE_CLASS_MAP).flat()));
 
       const actionState = {
         loading: false,
@@ -609,6 +670,12 @@
         }
       });
 
+      reviewDirectoryForm?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const value = reviewDirectoryInput ? reviewDirectoryInput.value : '';
+        submitReviewDirectoryUpdate(value);
+      });
+
       function setSettingsPanelVisibility(visible) {
         if (!settingsPanel || !settingsToggle) return;
         if (visible) {
@@ -680,6 +747,124 @@
         classes.forEach((cls) => actionFeedback.classList.add(cls));
         actionFeedback.textContent = message;
         actionFeedback.classList.remove('hidden');
+      }
+
+      function setStatusLine(message, tone = 'neutral') {
+        if (!statusLine) {
+          return;
+        }
+        statusLine.textContent = message;
+        STATUS_LINE_CLASSES.forEach((cls) => statusLine.classList.remove(cls));
+        const classes = STATUS_LINE_CLASS_MAP[tone] || STATUS_LINE_CLASS_MAP.neutral;
+        classes.forEach((cls) => statusLine.classList.add(cls));
+      }
+
+      function setReviewDirectoryStatus(message, tone = 'neutral') {
+        if (!reviewDirectoryStatus) {
+          return;
+        }
+        reviewDirectoryStatus.textContent = message;
+        REVIEW_DIRECTORY_STATUS_CLASSES.forEach((cls) => reviewDirectoryStatus.classList.remove(cls));
+        const classes =
+          REVIEW_DIRECTORY_STATUS_CLASS_MAP[tone] || REVIEW_DIRECTORY_STATUS_CLASS_MAP.neutral;
+        classes.forEach((cls) => reviewDirectoryStatus.classList.add(cls));
+      }
+
+      function formatDirectoryLabel(directory) {
+        if (typeof directory !== 'string') {
+          return 'the default folder';
+        }
+        const trimmed = directory.trim();
+        return trimmed ? trimmed : 'the default folder';
+      }
+
+      async function loadReviewSource(options = {}) {
+        if (!reviewDirectoryInput && !reviewDirectoryStatus) {
+          return;
+        }
+        if (options.showLoading) {
+          setReviewDirectoryStatus('Loading folder details…', 'neutral');
+        }
+        try {
+          const response = await fetch('/api/review-source', { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          const data = await response.json();
+          reviewSourceInfo = data;
+          if (reviewDirectoryInput && typeof data.directory === 'string') {
+            reviewDirectoryInput.value = data.directory;
+          }
+          const directoryLabel = formatDirectoryLabel(data.directory);
+          if (data.exists) {
+            setReviewDirectoryStatus(
+              `Looking for ${reviewFileName} in ${directoryLabel}.`,
+              'neutral'
+            );
+            setStatusLine(`Watching for changes in ${directoryLabel}…`, 'neutral');
+          } else {
+            setReviewDirectoryStatus(
+              `${reviewFileName} not found in ${directoryLabel}.`,
+              'error'
+            );
+            setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
+          }
+        } catch (error) {
+          console.error('Failed to load review source information', error);
+          setReviewDirectoryStatus('Unable to load review folder details.', 'error');
+          setStatusLine('Unable to load review folder details.', 'error');
+        }
+      }
+
+      async function submitReviewDirectoryUpdate(directoryValue) {
+        const payloadDirectory = typeof directoryValue === 'string' ? directoryValue.trim() : '';
+        if (reviewDirectorySubmit) {
+          reviewDirectorySubmit.disabled = true;
+        }
+        setReviewDirectoryStatus('Saving folder…', 'neutral');
+        try {
+          const response = await fetch('/api/review-source', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ directory: payloadDirectory })
+          });
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          const data = await response.json();
+          reviewSourceInfo = data;
+          if (reviewDirectoryInput && typeof data.directory === 'string') {
+            reviewDirectoryInput.value = data.directory;
+          }
+          const directoryLabel = formatDirectoryLabel(data.directory);
+          if (data.exists) {
+            setReviewDirectoryStatus(
+              `Found ${reviewFileName} in ${directoryLabel}. Reloading…`,
+              'success'
+            );
+            setStatusLine(
+              `Reloading to show ${reviewFileName} from ${directoryLabel}…`,
+              'neutral'
+            );
+            window.setTimeout(() => {
+              window.location.reload();
+            }, 400);
+          } else {
+            setReviewDirectoryStatus(
+              `${reviewFileName} not found in ${directoryLabel}.`,
+              'error'
+            );
+            setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
+          }
+        } catch (error) {
+          console.error('Failed to update review folder', error);
+          setReviewDirectoryStatus('Failed to update review folder.', 'error');
+          setStatusLine('Failed to update review folder.', 'error');
+        } finally {
+          if (reviewDirectorySubmit) {
+            reviewDirectorySubmit.disabled = false;
+          }
+        }
       }
 
       function updateModeButtons(mode) {
@@ -1280,6 +1465,8 @@
 
       document.addEventListener('keydown', handleActionHotkeys);
 
+      loadReviewSource({ showLoading: true });
+
       setViewerMode(getStoredMode(), { skipStorage: true });
 
       function applyHighlightTheme(mode) {
@@ -1337,6 +1524,19 @@
       async function pollMtime() {
         try {
           const response = await fetch('/mtime', { cache: 'no-store' });
+          if (response.status === 404) {
+            polling = true;
+            if (reviewSourceInfo) {
+              reviewSourceInfo.exists = false;
+            }
+            const directoryLabel = formatDirectoryLabel(reviewSourceInfo?.directory);
+            setReviewDirectoryStatus(
+              `${reviewFileName} not found in ${directoryLabel}.`,
+              'error'
+            );
+            setStatusLine(`Waiting for ${reviewFileName} in ${directoryLabel}…`, 'warning');
+            return;
+          }
           if (!response.ok) {
             throw new Error(`Request failed with status ${response.status}`);
           }
@@ -1347,20 +1547,20 @@
               return;
             }
             lastSeenMtime = payload.mtimeMs;
-            if (statusLine) {
-              statusLine.textContent = `Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`;
-              statusLine.classList.remove('text-red-500');
-              statusLine.classList.add('text-slate-500', 'dark:text-slate-400');
+            if (reviewSourceInfo) {
+              reviewSourceInfo.exists = true;
             }
+            const directoryLabel = formatDirectoryLabel(reviewSourceInfo?.directory);
+            setReviewDirectoryStatus(
+              `Looking for ${reviewFileName} in ${directoryLabel}.`,
+              'neutral'
+            );
+            setStatusLine(`Watching… Last updated ${formatTimestamp(payload.mtimeMs)}`, 'neutral');
           }
           polling = true;
         } catch (error) {
           polling = false;
-          if (statusLine) {
-            statusLine.textContent = 'Disconnected. Retrying…';
-            statusLine.classList.remove('text-slate-500', 'dark:text-slate-400');
-            statusLine.classList.add('text-red-500');
-          }
+          setStatusLine('Disconnected. Retrying…', 'error');
           console.error('Failed to poll /mtime', error);
         } finally {
           setTimeout(pollMtime, polling ? 2000 : 4000);

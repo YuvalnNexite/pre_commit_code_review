@@ -11,13 +11,14 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
-const SRC_DIR = path.resolve(process.env.SRC_DIR || '/data');
+const DEFAULT_SRC_DIR = path.resolve(process.env.SRC_DIR || '/data');
 const FILENAME = process.env.FILENAME || 'auto_code_review.md';
 const PORT = Number(process.env.PORT || 3000);
 
-const targetPath = path.resolve(SRC_DIR, FILENAME);
+let currentSourceDirectory = DEFAULT_SRC_DIR;
+let targetPath = path.resolve(currentSourceDirectory, FILENAME);
 const templatePath = path.join(__dirname, 'templates', 'index.html');
-const REPO_DIR = process.env.REPO_DIR ? path.resolve(process.env.REPO_DIR) : SRC_DIR;
+const REPO_DIR = process.env.REPO_DIR ? path.resolve(process.env.REPO_DIR) : DEFAULT_SRC_DIR;
 
 const md = new MarkdownIt({
   html: true,
@@ -26,6 +27,46 @@ const md = new MarkdownIt({
 });
 
 let cachedTemplate = null;
+
+function getReviewSource() {
+  return {
+    directory: currentSourceDirectory,
+    filename: FILENAME,
+    path: targetPath
+  };
+}
+
+function resolveSourceDirectory(input) {
+  if (typeof input !== 'string') {
+    return DEFAULT_SRC_DIR;
+  }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return DEFAULT_SRC_DIR;
+  }
+  return path.resolve(trimmed);
+}
+
+function updateSourceDirectory(nextDirectory) {
+  currentSourceDirectory = nextDirectory;
+  targetPath = path.resolve(currentSourceDirectory, FILENAME);
+  return getReviewSource();
+}
+
+async function checkReviewFileExists() {
+  try {
+    await fs.promises.access(targetPath, fs.constants.R_OK);
+    return true;
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') {
+      logger.logWarn('Failed to access review file during existence check', {
+        error,
+        targetPath
+      });
+    }
+    return false;
+  }
+}
 
 function createRequestId() {
   if (typeof randomUUID === 'function') {
@@ -54,19 +95,21 @@ async function loadTemplate() {
 }
 
 async function readMarkdownFile() {
-  logger.logDebug('Reading markdown review file', { targetPath });
-  const content = await fs.promises.readFile(targetPath, 'utf8');
+  const { path: reviewPath } = getReviewSource();
+  logger.logDebug('Reading markdown review file', { targetPath: reviewPath });
+  const content = await fs.promises.readFile(reviewPath, 'utf8');
   logger.logDebug('Finished reading markdown review file', {
-    targetPath,
+    targetPath: reviewPath,
     bytes: content.length
   });
   return content;
 }
 
 function injectTemplate(template, renderedMarkdown) {
+  const { path: reviewPath } = getReviewSource();
   return template
     .replace(/\{\{FILE_NAME\}\}/g, FILENAME)
-    .replace(/\{\{FILE_PATH\}\}/g, targetPath)
+    .replace(/\{\{FILE_PATH\}\}/g, reviewPath)
     .replace(/\{\{CONTENT\}\}/g, renderedMarkdown);
 }
 
@@ -79,17 +122,39 @@ app.get('/', async (req, res) => {
     ip: req.ip
   });
   try {
-    const [template, markdown] = await Promise.all([
-      loadTemplate(),
-      readMarkdownFile()
-    ]);
+    const templatePromise = loadTemplate();
+    let markdown = '';
+    let missingReviewFile = false;
+
+    try {
+      markdown = await readMarkdownFile();
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        missingReviewFile = true;
+        const { path: reviewPath } = getReviewSource();
+        logger.logWarn('Review markdown file not found while rendering index page', {
+          requestId,
+          reviewPath
+        });
+        markdown = `# Review file not found\n\nThe configured folder does not contain \`${FILENAME}\`.\n\n` +
+          `**Current location:** \`${reviewPath}\`\n\n` +
+          'You can update the folder path from the settings menu.';
+      } else {
+        throw error;
+      }
+    }
+
+    const template = await templatePromise;
     const rendered = md.render(markdown);
     const html = injectTemplate(template, rendered);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.send(html);
-    logger.logInfo('Served index page successfully', { requestId });
+    logger.logInfo('Served index page successfully', {
+      requestId,
+      missingReviewFile
+    });
   } catch (error) {
     const message = error.code === 'ENOENT'
       ? `Could not find markdown file at ${targetPath}`
@@ -272,6 +337,47 @@ app.post('/api/logs', (req, res) => {
   res.status(204).end();
 });
 
+app.get('/api/review-source', async (req, res) => {
+  const requestId = createRequestId();
+  logger.logInfo('Received request for review source information', {
+    requestId,
+    method: req.method,
+    path: req.path
+  });
+
+  const exists = await checkReviewFileExists();
+  const source = getReviewSource();
+
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.json({
+    ...source,
+    exists
+  });
+});
+
+app.post('/api/review-source', async (req, res) => {
+  const requestId = createRequestId();
+  const rawDirectory = typeof req.body?.directory === 'string' ? req.body.directory : '';
+  const resolvedDirectory = resolveSourceDirectory(rawDirectory);
+  const previous = getReviewSource();
+
+  logger.logInfo('Received request to update review source directory', {
+    requestId,
+    previousDirectory: previous.directory,
+    requestedDirectory: rawDirectory,
+    resolvedDirectory
+  });
+
+  const updated = updateSourceDirectory(resolvedDirectory);
+  const exists = await checkReviewFileExists();
+
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.json({
+    ...updated,
+    exists
+  });
+});
+
 app.get('/mtime', async (req, res) => {
   const requestId = createRequestId();
   logger.logDebug('Received mtime request', {
@@ -317,16 +423,17 @@ app.get('/healthz', (req, res) => {
 });
 
 function ensureSourceDirectory() {
-  return fs.promises.access(targetPath, fs.constants.R_OK)
+  const { path: reviewPath } = getReviewSource();
+  return fs.promises.access(reviewPath, fs.constants.R_OK)
     .then(() => {
-      logger.logInfo('Verified markdown source is accessible', { targetPath });
+      logger.logInfo('Verified markdown source is accessible', { targetPath: reviewPath });
     })
     .catch((error) => {
       const message = error.code === 'ENOENT'
-        ? `Markdown file not found at ${targetPath}`
-        : `Cannot read markdown file at ${targetPath}: ${error.message}`;
+        ? `Markdown file not found at ${reviewPath}`
+        : `Cannot read markdown file at ${reviewPath}: ${error.message}`;
       logger.logError('Failed to verify markdown source', {
-        targetPath,
+        targetPath: reviewPath,
         error,
         message
       });
@@ -336,16 +443,18 @@ function ensureSourceDirectory() {
 async function start() {
   await ensureSourceDirectory();
 
+  const { path: reviewPath } = getReviewSource();
   logger.logInfo('Starting Auto Code Review Viewer server', {
     port: PORT,
-    reviewFile: targetPath,
+    reviewFile: reviewPath,
     repoDirectory: REPO_DIR
   });
 
   app.listen(PORT, () => {
+    const { path: listenReviewPath } = getReviewSource();
     logger.logInfo('Auto Code Review Viewer listening', {
       port: PORT,
-      reviewFile: targetPath,
+      reviewFile: listenReviewPath,
       repoDirectory: REPO_DIR
     });
   });
