@@ -53,6 +53,16 @@ function escapeHtml(value) {
 
 const DEFAULT_ROOT_ATTR = escapeHtmlAttribute(DEFAULT_SRC_DIR);
 
+function isWindowsAbsolutePath(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  if (!value) {
+    return false;
+  }
+  return path.win32.isAbsolute(value) && !path.isAbsolute(value);
+}
+
 function sanitizeRootInput(raw) {
   if (typeof raw !== 'string') {
     return null;
@@ -66,10 +76,19 @@ function resolveRootDirectory(rawRoot) {
   if (!sanitized) {
     return DEFAULT_SRC_DIR;
   }
+  if (path.isAbsolute(sanitized)) {
+    return path.normalize(sanitized);
+  }
+  if (isWindowsAbsolutePath(sanitized)) {
+    return path.win32.normalize(sanitized);
+  }
   return path.resolve(DEFAULT_SRC_DIR, sanitized);
 }
 
 function resolveReviewPath(rootDir) {
+  if (isWindowsAbsolutePath(rootDir)) {
+    return path.win32.join(rootDir, FILENAME);
+  }
   return path.resolve(rootDir, FILENAME);
 }
 
