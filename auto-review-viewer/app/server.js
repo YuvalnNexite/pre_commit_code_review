@@ -39,6 +39,18 @@ function escapeHtmlAttribute(value) {
     .replace(/>/g, '&gt;');
 }
 
+function escapeHtml(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const DEFAULT_ROOT_ATTR = escapeHtmlAttribute(DEFAULT_SRC_DIR);
 
 function sanitizeRootInput(raw) {
@@ -128,6 +140,50 @@ function injectTemplate(template, renderedMarkdown, context) {
     .replace(/\{\{CONTENT\}\}/g, renderedMarkdown);
 }
 
+async function renderErrorPage(res, context, { status, message, details }) {
+  const instructions = 'Use the root directory form above to select a different location and reload the review.';
+  const lines = [
+    `> **${message}**`
+  ];
+
+  if (context.reviewPath) {
+    lines.push('', `- Looked for: \`${context.reviewPath}\`.`);
+  }
+
+  lines.push('', instructions);
+
+  const trimmedDetails = typeof details === 'string' ? details.trim() : '';
+  if (trimmedDetails) {
+    lines.push('', '```', trimmedDetails, '```');
+  }
+
+  const fallbackMarkdown = lines.join('\n');
+
+  try {
+    const template = await loadTemplate();
+    const rendered = md.render(fallbackMarkdown);
+    const html = injectTemplate(template, rendered, context);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    res.status(status).send(html);
+  } catch (templateError) {
+    logger.logError('Failed to render error template', {
+      error: templateError,
+      status,
+      message,
+      reviewPath: context.reviewPath
+    });
+
+    const safeMessage = escapeHtml(message);
+    const safeDetails = escapeHtml(trimmedDetails || templateError.message || '');
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    res.status(status).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Error</title><style>body{font-family:system-ui,sans-serif;padding:2rem;background:#f8f8f8;color:#111}pre{background:#fff;border-radius:0.5rem;padding:1rem;overflow:auto;border:1px solid #e5e5e5}</style></head><body><h1>Auto Code Review Viewer</h1><p>${safeMessage}</p><pre>${safeDetails}</pre></body></html>`);
+  }
+}
+
 app.get('/', async (req, res) => {
   const requestId = createRequestId();
   const { rootDir, reviewPath } = getPathsForRequest(req);
@@ -152,6 +208,7 @@ app.get('/', async (req, res) => {
     res.send(html);
     logger.logInfo('Served index page successfully', { requestId, rootDir, reviewPath });
   } catch (error) {
+    const status = error.code === 'ENOENT' ? 404 : 500;
     const message = error.code === 'ENOENT'
       ? `Could not find markdown file at ${reviewPath}`
       : 'Failed to render markdown file.';
@@ -163,9 +220,8 @@ app.get('/', async (req, res) => {
       rootDir,
       reviewPath
     });
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store, must-revalidate');
-    res.status(500).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Error</title><style>body{font-family:system-ui,sans-serif;padding:2rem;background:#f8f8f8;color:#111}pre{background:#fff;border-radius:0.5rem;padding:1rem;overflow:auto;border:1px solid #e5e5e5}</style></head><body><h1>Auto Code Review Viewer</h1><p>${message}</p><pre>${details}</pre></body></html>`);
+    const context = createTemplateContext({ rootDir, reviewPath });
+    await renderErrorPage(res, context, { status, message, details });
   }
 });
 
