@@ -6,8 +6,9 @@ services:
     environment:
       - SRC_DIR=/data
       - FILENAME=${ACR_FILENAME:-auto_code_review.md}
+      - REPO_DIR=${ACR_REPO_DIR:-/data}
     volumes:
-      - ${ACR_SOURCE:-./data}:/data:ro
+      - ${ACR_SOURCE:-./data}:/data
     develop:
       watch:
         - action: sync

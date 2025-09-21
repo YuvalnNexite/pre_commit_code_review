@@ -30,6 +30,7 @@ auto-review-viewer/
 |----------- |-----------------------|----------------------------------------------|
 | `SRC_DIR`  | `/data`               | Directory inside the container to read from. |
 | `FILENAME` | `auto_code_review.md` | File name to render inside `SRC_DIR`.        |
+| `REPO_DIR` | `/data`               | Git repository root used for applying diffs. |
 | `PORT`     | `3000`                | Port exposed by the Express server.          |
 
 ## Local development
@@ -56,10 +57,14 @@ Run it, mounting the folder that contains `auto_code_review.md`:
 ```bash
 docker run --rm -p 3000:3000 \
   -e SRC_DIR=/data \
+  -e REPO_DIR=/data \
   -e FILENAME=auto_code_review.md \
   -v /absolute/path/to/markdown:/data \
   auto-review-viewer
 ```
+
+Ensure the bind mount is read/write (omit `:ro`) so `git apply` can update your local files.
+The server automatically registers the mounted repository as a Git safe directory; if you still see `dubious ownership` errors, run `git config --global --add safe.directory /data` inside the container.
 
 ## Docker Compose
 
@@ -70,10 +75,13 @@ cd auto-review-viewer
 ACR_SOURCE=/absolute/path/to/markdown docker compose up --build
 ```
 
+Ensure `ACR_SOURCE` points to the Git repository you want to modify and keep the bind mount writable so suggestion patches can land on your host. If you mount the repo somewhere else inside the container, set `ACR_REPO_DIR` to that path.
+
 Environment variables:
 
 - `ACR_SOURCE`: directory to mount at `/data` (defaults to `./data`).
 - `ACR_FILENAME`: optional override for the markdown file name.
+- `ACR_REPO_DIR`: optional container path passed to Git when applying suggestions (defaults to `/data`).
 
 ## Endpoints
 

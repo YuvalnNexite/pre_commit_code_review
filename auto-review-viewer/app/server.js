@@ -18,7 +18,11 @@ let currentSourceDirectory = null;
 let currentSourceDirectoryInput = '';
 let targetPath = null;
 const templatePath = path.join(__dirname, 'templates', 'index.html');
-const REPO_DIR = process.env.REPO_DIR ? path.resolve(process.env.REPO_DIR) : process.cwd();
+const rawRepoDirEnv = typeof process.env.REPO_DIR === 'string' ? process.env.REPO_DIR.trim() : '';
+const rawSourceDirEnv = typeof process.env.SRC_DIR === 'string' ? process.env.SRC_DIR.trim() : '';
+const repoDirCandidate = rawRepoDirEnv || rawSourceDirEnv;
+const normalizedRepoDir = repoDirCandidate ? normalizeDirectorySeparators(repoDirCandidate) : '';
+const REPO_DIR = normalizedRepoDir ? path.resolve(normalizedRepoDir) : process.cwd();
 
 const md = new MarkdownIt({
   html: true,
@@ -67,6 +71,17 @@ function updateSourceDirectory(nextDirectory, rawInput) {
   }
   targetPath = currentSourceDirectory ? path.resolve(currentSourceDirectory, FILENAME) : null;
   return getReviewSource();
+}
+
+const initialSourceDirectoryEnv = rawSourceDirEnv;
+if (initialSourceDirectoryEnv) {
+  const normalizedInitialSourceInput = normalizeDirectorySeparators(initialSourceDirectoryEnv);
+  const resolvedInitialSourceDirectory = resolveSourceDirectory(initialSourceDirectoryEnv);
+  const initializedSource = updateSourceDirectory(resolvedInitialSourceDirectory, normalizedInitialSourceInput);
+  logger.logInfo('Initialized review source directory from environment', {
+    configuredDirectory: initializedSource.directory,
+    resolvedPath: initializedSource.path
+  });
 }
 
 async function checkReviewFileExists() {
