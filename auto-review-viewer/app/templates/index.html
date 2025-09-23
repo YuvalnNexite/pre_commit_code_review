@@ -196,6 +196,33 @@
                       <option value="relaxed">Relaxed</option>
                     </select>
                   </div>
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <span class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Notifications</span>
+                      <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Get notified when a new review is ready.</p>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                      <input
+                        id="notification-toggle"
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                      />
+                      <span>Enable</span>
+                    </label>
+                  </div>
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <label for="notification-sound-select" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Notification style</label>
+                      <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose whether notifications play a sound.</p>
+                    </div>
+                    <select
+                      id="notification-sound-select"
+                      class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-medium text-slate-700 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="sound">Sound and banner</option>
+                      <option value="silent">Banner only</option>
+                    </select>
+                  </div>
                   <form
                     id="review-directory-form"
                     class="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700"
@@ -438,6 +465,31 @@
         </div>
       </footer>
     </div>
+    <div
+      id="notification-toast"
+      class="fixed bottom-6 right-6 z-40 hidden max-w-sm rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-xl transition dark:border-slate-700 dark:bg-slate-900"
+      role="status"
+      aria-live="polite"
+      aria-hidden="true"
+    >
+      <div class="flex items-start gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">
+          <span aria-hidden="true">✅</span>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Review ready</h3>
+          <p id="notification-toast-message" class="mt-1 text-sm text-slate-600 dark:text-slate-300"></p>
+        </div>
+        <button
+          id="notification-toast-close"
+          type="button"
+          class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+          aria-label="Dismiss notification"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-b8qFkC4bIZfv5Ih0b07XHkTTwxabycufV7g9cMPed+0YLsFd1oS29Jym+wIpLW6+BFmGoG9PMa2wiuVdbTNjlQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/diff.min.js" integrity="sha512-f9GtPgNj0JfnYuxzsDgVKfd3RewZF8nPULz/0NkGi/Sd35rEJMMHSdOQcgynb43S/G/Sq0yYMpnt/kFBTw+Fxg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script>
@@ -481,8 +533,17 @@
       const reviewDirectoryInput = document.getElementById('review-directory-input');
       const reviewDirectoryStatus = document.getElementById('review-directory-status');
       const reviewDirectorySubmit = document.getElementById('review-directory-submit');
+      const reviewContentArticle = document.querySelector('#report-view article');
+      const notificationToggle = document.getElementById('notification-toggle');
+      const notificationSoundSelect = document.getElementById('notification-sound-select');
+      const notificationToast = document.getElementById('notification-toast');
+      const notificationToastMessage = document.getElementById('notification-toast-message');
+      const notificationToastClose = document.getElementById('notification-toast-close');
 
       let reviewSourceInfo = null;
+      let notificationSettings = { enabled: false, sound: 'silent' };
+      let notificationHideTimeout = null;
+      let notificationAudioContext = null;
 
       const FONT_SIZE_OPTIONS = {
         sm: '0.875rem',
@@ -500,6 +561,15 @@
         fontSize: 'sm',
         lineSpacing: 'cozy'
       };
+
+      const REVIEW_RUNNING_TEXT = 'Review running...';
+      const REVIEW_STATE_RUNNING = 'running';
+      const REVIEW_STATE_READY = 'ready';
+      const REVIEW_STATE_SESSION_KEY = 'acr-last-review-state';
+      const NOTIFICATION_PREF_KEY = 'acr-notifications-enabled';
+      const NOTIFICATION_SOUND_PREF_KEY = 'acr-notifications-sound';
+      const NOTIFICATION_SOUND_DEFAULT = 'silent';
+      const REVIEW_READY_MESSAGE = 'A new review report is ready to view.';
 
       const MODE_STORAGE_KEY = 'acr-view-mode';
       const MODE_BUTTON_ACTIVE_CLASSES = ['bg-brand-500', 'text-white', 'shadow'];
@@ -677,6 +747,198 @@
         submitReviewDirectoryUpdate(value);
       });
 
+      function getReviewContentText() {
+        if (!reviewContentArticle) {
+          return '';
+        }
+        return (reviewContentArticle.innerText || '').trim();
+      }
+
+      function getCurrentReviewState() {
+        const text = getReviewContentText();
+        return text === REVIEW_RUNNING_TEXT ? REVIEW_STATE_RUNNING : REVIEW_STATE_READY;
+      }
+
+      function getStoredReviewState() {
+        try {
+          const stored = window.sessionStorage.getItem(REVIEW_STATE_SESSION_KEY);
+          if (stored === REVIEW_STATE_RUNNING || stored === REVIEW_STATE_READY) {
+            return stored;
+          }
+        } catch (error) {
+          console.warn('Failed to read stored review state', error);
+        }
+        return null;
+      }
+
+      function storeReviewState(state) {
+        const value = state === REVIEW_STATE_RUNNING ? REVIEW_STATE_RUNNING : REVIEW_STATE_READY;
+        try {
+          window.sessionStorage.setItem(REVIEW_STATE_SESSION_KEY, value);
+        } catch (error) {
+          console.warn('Failed to store review state', error);
+        }
+      }
+
+      function rememberCurrentReviewState() {
+        storeReviewState(getCurrentReviewState());
+      }
+
+      function shouldNotifyReviewReady(previousState, nextState) {
+        return previousState === REVIEW_STATE_RUNNING && nextState === REVIEW_STATE_READY;
+      }
+
+      function loadNotificationSettings() {
+        let enabled = false;
+        let sound = NOTIFICATION_SOUND_DEFAULT;
+        try {
+          const storedEnabled = window.localStorage.getItem(NOTIFICATION_PREF_KEY);
+          if (storedEnabled === 'true') {
+            enabled = true;
+          } else if (storedEnabled === 'false') {
+            enabled = false;
+          }
+          const storedSound = window.localStorage.getItem(NOTIFICATION_SOUND_PREF_KEY);
+          if (storedSound === 'sound' || storedSound === 'silent') {
+            sound = storedSound;
+          }
+        } catch (error) {
+          console.warn('Failed to read notification settings', error);
+        }
+        return { enabled, sound };
+      }
+
+      function persistNotificationSettings(settings) {
+        const enabledValue = settings.enabled ? 'true' : 'false';
+        const soundValue = settings.sound === 'sound' ? 'sound' : 'silent';
+        try {
+          window.localStorage.setItem(NOTIFICATION_PREF_KEY, enabledValue);
+          window.localStorage.setItem(NOTIFICATION_SOUND_PREF_KEY, soundValue);
+        } catch (error) {
+          console.warn('Failed to store notification settings', error);
+        }
+      }
+
+      function applyNotificationSettingsToControls() {
+        const enabled = Boolean(notificationSettings.enabled);
+        const soundValue = notificationSettings.sound === 'sound' ? 'sound' : 'silent';
+        if (notificationToggle) {
+          notificationToggle.checked = enabled;
+        }
+        if (notificationSoundSelect) {
+          notificationSoundSelect.value = soundValue;
+          notificationSoundSelect.disabled = !enabled;
+          if (notificationSoundSelect.disabled) {
+            notificationSoundSelect.setAttribute('aria-disabled', 'true');
+          } else {
+            notificationSoundSelect.removeAttribute('aria-disabled');
+          }
+        }
+        notificationSettings.enabled = enabled;
+        notificationSettings.sound = soundValue;
+      }
+
+      function warmUpNotificationAudio() {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) {
+          return null;
+        }
+        if (!notificationAudioContext) {
+          try {
+            notificationAudioContext = new AudioCtx();
+          } catch (error) {
+            console.warn('Failed to create audio context', error);
+            notificationAudioContext = null;
+            return null;
+          }
+        }
+        if (notificationAudioContext && notificationAudioContext.state === 'suspended') {
+          notificationAudioContext.resume().catch(() => {});
+        }
+        return notificationAudioContext;
+      }
+
+      function playNotificationSound() {
+        const ctx = warmUpNotificationAudio();
+        if (!ctx) {
+          return;
+        }
+        try {
+          const oscillator = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const now = ctx.currentTime;
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(880, now);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+          oscillator.connect(gain).connect(ctx.destination);
+          oscillator.start(now);
+          oscillator.stop(now + 0.6);
+        } catch (error) {
+          console.warn('Failed to play notification sound', error);
+        }
+      }
+
+      function hideNotificationToast() {
+        if (notificationHideTimeout) {
+          window.clearTimeout(notificationHideTimeout);
+          notificationHideTimeout = null;
+        }
+        if (!notificationToast) {
+          return;
+        }
+        notificationToast.classList.add('hidden');
+        notificationToast.setAttribute('aria-hidden', 'true');
+      }
+
+      function showNotificationToast(message) {
+        if (!notificationToast || !notificationToastMessage) {
+          return;
+        }
+        notificationToastMessage.textContent = message;
+        notificationToast.classList.remove('hidden');
+        notificationToast.setAttribute('aria-hidden', 'false');
+        if (notificationHideTimeout) {
+          window.clearTimeout(notificationHideTimeout);
+        }
+        notificationHideTimeout = window.setTimeout(() => {
+          hideNotificationToast();
+        }, 10000);
+      }
+
+      function notifyReviewReady() {
+        if (!notificationSettings.enabled) {
+          return;
+        }
+        const message = reviewFileName
+          ? `${reviewFileName} is ready to view.`
+          : REVIEW_READY_MESSAGE;
+        showNotificationToast(message);
+        logClientEvent('notify_review_ready', {
+          sound: notificationSettings.sound === 'sound' ? 'sound' : 'silent'
+        });
+        if (notificationSettings.sound === 'sound') {
+          playNotificationSound();
+        }
+      }
+
+      const previousReviewState = getStoredReviewState();
+      const currentReviewState = getCurrentReviewState();
+
+      notificationSettings = loadNotificationSettings();
+      applyNotificationSettingsToControls();
+      persistNotificationSettings(notificationSettings);
+      if (notificationSettings.enabled && notificationSettings.sound === 'sound') {
+        warmUpNotificationAudio();
+      }
+
+      if (shouldNotifyReviewReady(previousReviewState, currentReviewState)) {
+        notifyReviewReady();
+      }
+
+      storeReviewState(currentReviewState);
+
       function setSettingsPanelVisibility(visible) {
         if (!settingsPanel || !settingsToggle) return;
         if (visible) {
@@ -707,11 +969,50 @@
         setSettingsPanelVisibility(false);
       });
 
+      notificationToggle?.addEventListener('change', (event) => {
+        const enabled = Boolean(event.target?.checked);
+        notificationSettings.enabled = enabled;
+        applyNotificationSettingsToControls();
+        persistNotificationSettings(notificationSettings);
+        if (!enabled) {
+          hideNotificationToast();
+          logClientEvent('notifications_disabled', {});
+        } else {
+          if (notificationSettings.sound === 'sound') {
+            warmUpNotificationAudio();
+          }
+          logClientEvent('notifications_enabled', {
+            sound: notificationSettings.sound === 'sound' ? 'sound' : 'silent'
+          });
+        }
+      });
+
+      notificationSoundSelect?.addEventListener('change', (event) => {
+        const value = event.target?.value === 'sound' ? 'sound' : 'silent';
+        notificationSettings.sound = value;
+        applyNotificationSettingsToControls();
+        persistNotificationSettings(notificationSettings);
+        if (notificationSettings.enabled && value === 'sound') {
+          warmUpNotificationAudio();
+        }
+        logClientEvent('notifications_sound_changed', { sound: value });
+      });
+
+      notificationToastClose?.addEventListener('click', () => {
+        hideNotificationToast();
+        logClientEvent('notification_dismissed', {});
+      });
+
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           setSettingsPanelVisibility(false);
           hideHelpPanel();
+          hideNotificationToast();
         }
+      });
+
+      window.addEventListener('beforeunload', () => {
+        rememberCurrentReviewState();
       });
 
       function getStoredMode() {
@@ -1573,6 +1874,7 @@
           const payload = await response.json();
           if (typeof payload.mtimeMs === 'number') {
             if (lastSeenMtime && payload.mtimeMs > lastSeenMtime) {
+              rememberCurrentReviewState();
               window.location.reload();
               return;
             }
