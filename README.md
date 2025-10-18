@@ -1,6 +1,6 @@
 # Pre-Commit Code Review Hook
 
-Automated code review using Gemini AI that runs before each commit.
+Automated code review using Codex (preferred), Gemini, or Cursor AI that runs before each commit.
 
 ## Quick Installation
 
@@ -30,6 +30,16 @@ or, from a local clone:
 ### Python linting
 pip install flake8
 
+### Codex CLI (preferred)
+```bash
+pip install codex-cli
+```
+Make sure the Codex CLI is configured and the `codex chat` command works. The hook will default to the Codex CLI with the `gpt-5-codex-medium` model whenever it is available.
+For a quick check run:
+```
+codex chat --model gpt-5-codex-medium --input "ping"
+```
+
 ### Gemini Cli
 ```bash
 npm install -g @google/generative-ai-cli
@@ -56,6 +66,6 @@ if you change a file that uses a library called numpy -> it will read numpy.md
 if you change a file in a directory called reports -> it will read reports.md
 
 ## Explanation:
-This script installs a pre-commit hook that uses AI to review code before each commit. It requires Gemini cli or cursor cli for the reviews and flake8 for linting.
+This script installs a pre-commit hook that uses AI to review code before each commit. It supports Codex (preferred), Gemini, or Cursor CLIs for the reviews and flake8 for linting.
 The hook script is copied to the `$HOME.git-hooks-code-review` directory and made executable.
 A memory directory is created to improve future reviews and give the model domain knowledge.

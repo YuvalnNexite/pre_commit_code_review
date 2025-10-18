@@ -54,6 +54,18 @@ log_ai_stderr() {
 }
 
 need() { command -v "$1" >/dev/null 2>&1; }
+
+codex_cli_available() {
+  if ! need codex; then
+    return 1
+  fi
+
+  if codex --help >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
 repo_path="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 truncate_log_if_needed "$LOG_FILE"
 truncate_log_if_needed "$AI_STDERR_LOG"
@@ -158,41 +170,52 @@ Structure your report exactly as follows:
 
 PROMPT
 
-    # Run AI review: try Gemini first; on failure, try Cursor (cursor-agent)
-    if need gemini; then
+    review_success=0
+
+    if codex_cli_available; then
+      log_stage "Async review: invoking Codex CLI"
+      if codex exec < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+        log_stage "Async review: Codex review completed successfully"
+        write_ai_success "Codex review"
+        review_success=1
+      else
+        log_stage "Async review: Codex review failed"
+        log_ai_stderr "Codex review stderr (failure)" "$tmp_stderr"
+      fi
+    fi
+
+    if [ "$review_success" -ne 1 ] && need gemini; then
       log_stage "Async review: invoking Gemini CLI"
       if gemini --approval-mode "auto_edit" -m gemini-2.5-pro < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
         log_stage "Async review: Gemini review completed successfully"
         write_ai_success "Gemini review"
-      elif need cursor-agent; then
-        log_stage "Async review: Gemini review failed - attempting Cursor CLI"
-        log_ai_stderr "Gemini review stderr (failure)" "$tmp_stderr"
-        if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
-          log_stage "Async review: Cursor review completed successfully"
-          write_ai_success "Cursor review"
-        else
-          log_stage "Async review: Cursor review failed"
-          printf "_Cursor review failed._\n" > "$tmp_out"
-          log_ai_stderr "Cursor review stderr (failure)" "$tmp_stderr"
-        fi
+        review_success=1
       else
-        log_stage "Async review: Gemini review failed and Cursor CLI not found"
-        printf "_Gemini review failed and no Cursor CLI found._\n" > "$tmp_out"
+        log_stage "Async review: Gemini review failed"
         log_ai_stderr "Gemini review stderr (failure)" "$tmp_stderr"
       fi
-    elif need cursor-agent; then
+    fi
+
+    if [ "$review_success" -ne 1 ] && need cursor-agent; then
       log_stage "Async review: invoking Cursor CLI"
       if cursor-agent -f --output-format text < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
         log_stage "Async review: Cursor review completed successfully"
         write_ai_success "Cursor review"
+        review_success=1
       else
         log_stage "Async review: Cursor review failed"
-        printf "_Cursor review failed._\n" > "$tmp_out"
         log_ai_stderr "Cursor review stderr (failure)" "$tmp_stderr"
       fi
-    else
-      log_stage "Async review: no supported AI CLI found - skipping review"
-      printf "_Skipped AI review (no supported CLI found: gemini, cursor-agent)_\n" > "$tmp_out"
+    fi
+
+    if [ "$review_success" -ne 1 ]; then
+      if codex_cli_available || need gemini || need cursor-agent; then
+        log_stage "Async review: AI review failed using available CLIs"
+        printf "_AI review failed using available CLIs (Codex/Gemini/Cursor)._\n" > "$tmp_out"
+      else
+        log_stage "Async review: no supported AI CLI found - skipping review"
+        printf "_Skipped AI review (no supported CLI found: codex, gemini, cursor-agent)_\n" > "$tmp_out"
+      fi
     fi
   fi
 
