@@ -3,7 +3,7 @@ set -euo pipefail
 
 LOG_DIR="${HOME}/.git-hooks-code-review"
 LOG_FILE="${LOG_DIR}/code_review_progress.log"
-AI_STDERR_LOG="${LOG_DIR}/ai_stdder.log"
+AI_STDERR_LOG="${LOG_DIR}/ai_stdder.log".
 
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 
@@ -174,7 +174,7 @@ PROMPT
 
     if codex_cli_available; then
       log_stage "Async review: invoking Codex CLI"
-      if codex chat --model "gpt-5-codex-medium" < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
+      if codex exec < "$tmp_prompt" > "$tmp_stdout" 2> "$tmp_stderr"; then
         log_stage "Async review: Codex review completed successfully"
         write_ai_success "Codex review"
         review_success=1
