@@ -1,0 +1,21 @@
+{
+  "name": "auto-review-viewer",
+  "version": "1.0.0",
+  "description": "Auto Code Review markdown viewer",
+  "main": "server.js",
+  "scripts": {
+    "test": "node --check server.js",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^4.19.2",
+    "markdown-it": "^14.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
